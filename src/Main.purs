@@ -107,6 +107,7 @@ import Canvas.View as View
 import Canvas.View (Msg)
 import Canvas.Types (Tool(BrushTool))
 import Canvas.Physics.Gravity as Gravity
+import Canvas.Runtime.DOM as DOM
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                 // app config
@@ -396,8 +397,8 @@ handleMouseUp _event = View.CanvasReleased
 
 -- | Main entry point.
 -- |
--- | This function would be called by the DOM runtime to mount the app.
--- | For now, it just logs initialization (actual mounting requires FFI).
+-- | Mounts the Canvas application to the #app DOM element.
+-- | Returns Effect Unit after initialization completes.
 main :: Effect Unit
 main = do
   log "Canvas Builder initializing..."
@@ -406,8 +407,13 @@ main = do
   log "  - Touch input: ready"
   log "  - Physics timestep: 16.67ms (60 FPS)"
   log ""
-  log "To mount the app, use Hydrogen.Runtime.DOM.mount"
-  log "  mount canvasApp \"#app-root\""
+  
+  -- Mount the application to #app
+  -- This starts the animation loop and returns immediately
+  DOM.mount "#app" canvasApp updateCanvas View.view initCanvas
+  
+  -- Log completion and return unit
+  log "Canvas Builder ready!"
   pure unit
 
 

@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Canvas Builder - Physics Paint</title>
+  <style>
+    /* Reset and base styles */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a2e;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      touch-action: none;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    /* Loading state */
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #888;
+      font-size: 1.2rem;
+      gap: 20px;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #333;
+      border-top-color: #e94560;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Canvas app styles */
+    .canvas-app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: #16213e;
+    }
+
+    .canvas-toolbar {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      background: #0f3460;
+      border-bottom: 1px solid #1a1a2e;
+      gap: 12px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .canvas-toolbar button {
+      padding: 8px 16px;
+      background: #e94560;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+
+    .canvas-toolbar button:hover {
+      background: #ff6b6b;
+    }
+
+    .canvas-toolbar button.active {
+      background: #533483;
+    }
+
+    .canvas-surface {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #f5f5dc;
+      cursor: crosshair;
+    }
+
+    .canvas-statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      background: #0f3460;
+      border-top: 1px solid #1a1a2e;
+      color: #888;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       VIRTUAL TILT CONTROLLER - "Roller Ball"
+       ═══════════════════════════════════════════════════════════════════════ */
+    
+    #tilt-controller {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      width: 120px;
+      height: 120px;
+      background: rgba(15, 52, 96, 0.95);
+      border-radius: 50%;
+      border: 3px solid #e94560;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 30px rgba(0, 0, 0, 0.3);
+      cursor: grab;
+      touch-action: none;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #tilt-controller:active {
+      cursor: grabbing;
+    }
+
+    #tilt-controller::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      height: 80%;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #2a5298, #0f3460);
+      box-shadow: inset 2px 2px 10px rgba(255, 255, 255, 0.1);
+    }
+
+    #tilt-ball {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background: radial-gradient(circle at 30% 30%, #ff8a8a, #e94560);
+      border-radius: 50%;
+      box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.4);
+      transform: translate(-50%, -50%);
+      left: 50%;
+      top: 50%;
+      transition: none;
+      z-index: 1;
+    }
+
+    #tilt-label {
+      position: absolute;
+      bottom: -25px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    /* Gravity indicator on canvas */
+    .gravity-indicator {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .gravity-arrow {
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-bottom: 20px solid #e94560;
+      transform-origin: center 15px;
+      transition: transform 0.1s ease-out;
+    }
+
+    /* Layer panel */
+    .layer-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 200px;
+      max-height: 300px;
+      background: rgba(15, 52, 96, 0.95);
+      border-radius: 8px;
+      padding: 10px;
+      color: white;
+      font-size: 12px;
+      overflow-y: auto;
+    }
+
+    .layer-item {
+      display: flex;
+      align-items: center;
+      padding: 6px 8px;
+      margin: 4px 0;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .layer-item.active {
+      background: rgba(233, 69, 96, 0.3);
+      border: 1px solid #e94560;
+    }
+
+    /* Particles */
+    .paint-particle {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    /* Debug overlay */
+    .debug-overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #0f0;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 11px;
+      padding: 10px;
+      border-radius: 4px;
+      pointer-events: none;
+      line-height: 1.6;
+      min-width: 200px;
+    }
+
+    .debug-overlay .value {
+      color: #0ff;
+    }
+
+    /* Brush selector dropdown */
+    .brush-selector {
+      position: relative;
+    }
+
+    .brush-selector select {
+      padding: 8px 12px;
+      background: #16213e;
+      color: white;
+      border: 1px solid #e94560;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    /* Color picker */
+    .color-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .color-picker input[type="color"] {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: none;
+    }
+
+    /* Instructions overlay */
+    #instructions {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15, 52, 96, 0.98);
+      padding: 30px;
+      border-radius: 12px;
+      color: white;
+      text-align: center;
+      max-width: 400px;
+      z-index: 2000;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    #instructions h2 {
+      margin-bottom: 20px;
+      color: #e94560;
+    }
+
+    #instructions p {
+      margin-bottom: 15px;
+      line-height: 1.6;
+      color: #ccc;
+    }
+
+    #instructions .key {
+      display: inline-block;
+      background: #333;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+      margin: 0 2px;
+    }
+
+    #instructions button {
+      margin-top: 20px;
+      padding: 12px 30px;
+      background: #e94560;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #instructions button:hover {
+      background: #ff6b6b;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- Instructions overlay (shown first) -->
+  <div id="instructions">
+    <h2>Canvas Builder</h2>
+    <p>Physics-based paint that flows with gravity!</p>
+    <p>
+      <strong>Paint:</strong> Click and drag on the canvas<br>
+      <strong>Tilt:</strong> Drag the <span class="key">roller ball</span> (bottom-left) to control gravity<br>
+      <strong>On mobile:</strong> Tilt your device!
+    </p>
+    <p>
+      <span class="key">Space</span> Pause physics<br>
+      <span class="key">C</span> Clear canvas<br>
+      <span class="key">G</span> Toggle gravity
+    </p>
+    <button onclick="startApp()">Start Painting</button>
+  </div>
+
+  <!-- Virtual tilt controller -->
+  <div id="tilt-controller" class="hidden">
+    <div id="tilt-ball"></div>
+    <span id="tilt-label">Drag to tilt</span>
+  </div>
+
+  <!-- App mount point -->
+  <div id="app">
+    <div class="loading">
+      <div class="loading-spinner"></div>
+      <span>Loading Canvas Builder...</span>
+    </div>
+  </div>
+
+  <script type="module">
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIRTUAL TILT CONTROLLER
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    let virtualBeta = 0;   // Forward/back tilt (-90 to 90)
+    let virtualGamma = 0;  // Left/right tilt (-90 to 90)
+    let isDragging = false;
+    
+    const controller = document.getElementById('tilt-controller');
+    const ball = document.getElementById('tilt-ball');
+    
+    function updateBallPosition() {
+      // Map beta/gamma (-45 to 45 range for usability) to ball position
+      const maxOffset = 35; // pixels from center
+      const x = 50 + (virtualGamma / 45) * maxOffset;
+      const y = 50 + (virtualBeta / 45) * maxOffset;
+      ball.style.left = `${Math.max(15, Math.min(85, x))}%`;
+      ball.style.top = `${Math.max(15, Math.min(85, y))}%`;
+    }
+    
+    function handleTiltStart(e) {
+      e.preventDefault();
+      isDragging = true;
+      controller.style.cursor = 'grabbing';
+    }
+    
+    function handleTiltMove(e) {
+      if (!isDragging) return;
+      e.preventDefault();
+      
+      const rect = controller.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      
+      let clientX, clientY;
+      if (e.touches) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      
+      // Calculate offset from center, map to tilt angles
+      const maxOffset = rect.width / 2 - 15;
+      const offsetX = Math.max(-maxOffset, Math.min(maxOffset, clientX - centerX));
+      const offsetY = Math.max(-maxOffset, Math.min(maxOffset, clientY - centerY));
+      
+      virtualGamma = (offsetX / maxOffset) * 45;
+      virtualBeta = (offsetY / maxOffset) * 45;
+      
+      updateBallPosition();
+      dispatchVirtualOrientation();
+    }
+    
+    function handleTiltEnd() {
+      isDragging = false;
+      controller.style.cursor = 'grab';
+    }
+    
+    function dispatchVirtualOrientation() {
+      // Dispatch a custom event that our app can listen to
+      window.dispatchEvent(new CustomEvent('virtualorientation', {
+        detail: {
+          alpha: 0,
+          beta: virtualBeta,
+          gamma: virtualGamma,
+          absolute: false
+        }
+      }));
+      
+      // Also dispatch as standard deviceorientation for compatibility
+      const event = new DeviceOrientationEvent('deviceorientation', {
+        alpha: 0,
+        beta: virtualBeta,
+        gamma: virtualGamma,
+        absolute: false
+      });
+      // Some browsers don't support DeviceOrientationEvent constructor
+      try {
+        window.dispatchEvent(event);
+      } catch (err) {
+        // Fallback: directly update app state if available
+        if (window.__canvasUpdateGravity) {
+          window.__canvasUpdateGravity(0, virtualBeta, virtualGamma);
+        }
+      }
+    }
+    
+    // Event listeners for tilt controller
+    controller.addEventListener('mousedown', handleTiltStart);
+    controller.addEventListener('touchstart', handleTiltStart, { passive: false });
+    window.addEventListener('mousemove', handleTiltMove);
+    window.addEventListener('touchmove', handleTiltMove, { passive: false });
+    window.addEventListener('mouseup', handleTiltEnd);
+    window.addEventListener('touchend', handleTiltEnd);
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // APP INITIALIZATION
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    window.startApp = async function() {
+      document.getElementById('instructions').classList.add('hidden');
+      document.getElementById('tilt-controller').classList.remove('hidden');
+      
+      try {
+        // Request device orientation permission on iOS
+        if (typeof DeviceOrientationEvent !== 'undefined' && 
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+          const permission = await DeviceOrientationEvent.requestPermission();
+          console.log('Device orientation permission:', permission);
+        }
+        
+        // Run the bundled PureScript app (loaded via script tag)
+        if (window.Main && window.Main.main) {
+          window.Main.main();
+        } else {
+          // Fallback to ES module import
+          const { main } = await import('./output/Main/index.js');
+          main();
+        }
+        
+      } catch (err) {
+        console.error('Failed to start Canvas Builder:', err);
+        document.getElementById('app').innerHTML = `
+          <div class="loading" style="color: #e94560;">
+            <p>Failed to load: ${err.message}</p>
+            <p style="font-size: 12px; color: #888;">Check console for details</p>
+          </div>
+        `;
+      }
+    };
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // KEYBOARD SHORTCUTS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    document.addEventListener('keydown', (e) => {
+      // Don't capture if typing in input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      
+      switch (e.key.toLowerCase()) {
+        case ' ':
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent('canvas:togglePlaying'));
+          break;
+        case 'c':
+          if (!e.ctrlKey && !e.metaKey) {
+            window.dispatchEvent(new CustomEvent('canvas:clear'));
+          }
+          break;
+        case 'g':
+          window.dispatchEvent(new CustomEvent('canvas:toggleGravity'));
+          break;
+        case 'z':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            if (e.shiftKey) {
+              window.dispatchEvent(new CustomEvent('canvas:redo'));
+            } else {
+              window.dispatchEvent(new CustomEvent('canvas:undo'));
+            }
+          }
+          break;
+      }
+    });
+    
+    // Auto-start in development (remove for production)
+    // startApp();
+  </script>
+</body>
+</html>

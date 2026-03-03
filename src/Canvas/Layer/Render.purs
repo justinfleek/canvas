@@ -77,6 +77,8 @@ module Canvas.Layer.Render
   , markDirty
   , clearDirty
   , expandDirty
+  , dirtyIntersects
+  , needsRender
   
   -- * Cache
   , LayerCache
@@ -163,22 +165,49 @@ import Canvas.Layer.Types
 -- | Render a single layer as an Element.
 -- |
 -- | Takes the layer and a render function for content.
+-- | Includes a hidden label span for debugging/inspection tools.
 renderLayer :: forall msg. Layer -> Array (Element msg) -> Element msg
 renderLayer layer content =
   if not (layerVisible layer)
     then div_ [] []  -- Hidden layer renders nothing
     else
-      div_
-        ([ class_ ("layer layer-" <> show (unwrapLayerId (layerId layer)))
-        ] <> layerStyle layer)
-        content
+      let
+        -- Debug label for layer (hidden by default, visible in dev tools)
+        debugLabel = span_
+          (styles
+              [ Tuple "position" "absolute"
+              , Tuple "top" "0"
+              , Tuple "left" "0"
+              , Tuple "font-size" "10px"
+              , Tuple "color" "#888"
+              , Tuple "pointer-events" "none"
+              , Tuple "opacity" "0"  -- Hidden by default
+              , Tuple "z-index" "999"
+              ])
+          [ text (layerName layer) ]
+      in
+        div_
+          ([ class_ ("layer layer-" <> show (unwrapLayerId (layerId layer)))
+          ] <> layerStyle layer)
+          ([ debugLabel ] <> content)
 
 -- | Render layer content (strokes + particles).
+-- |
+-- | Applies layer properties (opacity, blend mode) to the content container.
+-- | The layer name is used for the CSS class for debugging/inspection.
 renderLayerContent :: forall msg. Layer -> Array (Element msg) -> Array (Element msg) -> Element msg
 renderLayerContent layer strokes particles =
-  div_
-    [ class_ "layer-content" ]
-    (strokes <> particles)
+  let
+    opacity = layerOpacity layer / 100.0
+    blend = blendModeName (layerBlendMode layer)
+    name = layerName layer
+  in
+    div_
+      ([ class_ ("layer-content layer-" <> name) ] <> styles
+          [ Tuple "opacity" (show opacity)
+          , Tuple "mix-blend-mode" blend
+          ])
+      (strokes <> particles)
 
 -- | Render layer background (for background layer only).
 renderLayerBackground :: forall msg. Layer -> Background -> Element msg
@@ -354,8 +383,6 @@ renderStrokePath points =
           then "M " <> show pt.x <> " " <> show pt.y
           else acc <> " L " <> show pt.x <> " " <> show pt.y
       ) "" points
-  where
-    foldl = Array.foldl
 
 -- | Render stroke as individual point circles (for debugging).
 renderStrokePoints :: forall msg. Array Point2D -> Color -> Number -> Array (Element msg)
@@ -458,6 +485,18 @@ expandDirty r newBounds =
     r { bounds = mkBounds minX minY (maxX - minX) (maxY - minY)
       , dirty = true
       }
+
+-- | Check if dirty region intersects with given bounds.
+-- | Returns true if the bounds overlap and the region is dirty.
+dirtyIntersects :: DirtyRegion -> Bounds -> Boolean
+dirtyIntersects r testBounds =
+  r.dirty && boundsIntersects r.bounds testBounds
+
+-- | Check if a region needs re-rendering based on bounds overlap.
+-- | Used for culling - skip rendering regions that don't overlap viewport.
+needsRender :: DirtyRegion -> Bounds -> Boolean
+needsRender r viewportBounds =
+  r.dirty && boundsIntersects r.bounds viewportBounds
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                      // cache

@@ -88,6 +88,8 @@ import Prelude
   , (<>)
   , (*)
   , (/)
+  , (<)
+  , (>)
   , map
   , negate
   , (==)
@@ -144,6 +146,7 @@ import Hydrogen.Schema.Canvas.Physics
   , gravityMagnitude
   , gravityX
   , gravityY
+  , gravityZ
   )
 
 -- Canvas State
@@ -409,12 +412,19 @@ mediaLabel WetIntoWet = "W/W"
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | The main canvas surface where paint lives.
+-- |
+-- | Note: The event handlers here use placeholder coordinates (0.0, 0.0) because
+-- | Hydrogen's element event system dispatches fixed messages. Actual coordinate
+-- | extraction happens in the DOM runtime via subscription event listeners in
+-- | Main.purs (handleMouseDown, handleTouchStart, etc.) which have access to
+-- | the raw browser events and extract clientX/clientY.
 renderCanvas :: AppState -> Element Msg
 renderCanvas state =
   div_
     ([ class_ "canvas-surface"
     , id_ "paint-canvas"
-    , onMouseDown (CanvasTouched 0.0 0.0)  -- TODO: extract coords via event decoder
+    -- Event handlers are placeholders - real input comes from subscriptions
+    , onMouseDown (CanvasTouched 0.0 0.0)
     , onMouseMove (CanvasMoved 0.0 0.0)
     , onMouseUp CanvasReleased
     , onTouchStart (CanvasTouched 0.0 0.0)
@@ -553,16 +563,25 @@ renderDebugOverlay state =
       magnitude = gravityMagnitude gravVector
       gx = gravityX gravVector
       gy = gravityY gravVector
+      gz = gravityZ gravVector
       particleCount = Paint.particleCount (State.paintSystem state)
       layerCt = State.layerCount state
+      -- Detect if device is upside-down (gravity pushing paint onto glass)
+      -- gz > 0 means gravity is pointing out of the screen (upside-down)
+      isUpsideDown = gz > 0.3
+      paintPressure = if isUpsideDown 
+                        then "ONTO GLASS" 
+                        else if gz < negate 0.3 
+                          then "Into glass" 
+                          else "Neutral"
   in div_
     ([ class_ "debug-overlay" ] <> styles
         [ Tuple "position" "absolute"
         , Tuple "bottom" "8px"
         , Tuple "left" "8px"
         , Tuple "padding" "8px"
-        , Tuple "background" "rgba(0,0,0,0.7)"
-        , Tuple "color" "#0f0"
+        , Tuple "background" (if isUpsideDown then "rgba(233,69,96,0.8)" else "rgba(0,0,0,0.7)")
+        , Tuple "color" (if isUpsideDown then "#fff" else "#0f0")
         , Tuple "font-family" "monospace"
         , Tuple "font-size" "11px"
         , Tuple "border-radius" "4px"
@@ -572,6 +591,7 @@ renderDebugOverlay state =
     , div_ [] [ text ("Layers: " <> show layerCt) ]
     , div_ [] [ text ("Gravity X: " <> show gx) ]
     , div_ [] [ text ("Gravity Y: " <> show gy) ]
+    , div_ [] [ text ("Gravity Z: " <> show gz <> " [" <> paintPressure <> "]") ]
     , div_ [] [ text ("Gravity Mag: " <> show magnitude <> "g") ]
     , div_ [] [ text ("Playing: " <> show (State.isPlaying state)) ]
     , div_ [] [ text ("Tool: " <> show (State.currentTool state)) ]

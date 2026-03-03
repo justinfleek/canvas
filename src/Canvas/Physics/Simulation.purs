@@ -112,9 +112,7 @@ module Canvas.Physics.Simulation
 -- ═════════════════════════════════════════════════════════════════════════════
 
 import Prelude
-  ( class Eq
-  , class Show
-  , show
+  ( show
   , (==)
   , (/=)
   , (&&)

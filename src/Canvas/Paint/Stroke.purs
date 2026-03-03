@@ -76,6 +76,22 @@ module Canvas.Paint.Stroke
   , strokeAveragePressure
   , strokePointCount
   
+  -- * Stroke Comparison
+  , pointsEqual
+  , pointsDiffer
+  , strokesEqual
+  , strokesDiffer
+  
+  -- * Stroke Validation
+  , isStrokeValid
+  , isStrokeCommittable
+  , hasMinimumLength
+  , hasMinimumPoints
+  , filterHighPressurePoints
+  , filterLowPressurePoints
+  , findFirstHighPressurePoint
+  , findLastHighPressurePoint
+  
   -- * Stroke Transforms
   , mirrorStrokeX
   , mirrorStrokeY
@@ -100,9 +116,7 @@ module Canvas.Paint.Stroke
 -- ═════════════════════════════════════════════════════════════════════════════
 
 import Prelude
-  ( class Eq
-  , class Show
-  , show
+  ( show
   , (==)
   , (/=)
   , (&&)
@@ -122,7 +136,7 @@ import Prelude
   , negate
   )
 
-import Data.Array (length, head, last, snoc, zipWith, foldl, index) as Array
+import Data.Array (length, head, last, snoc, zipWith, foldl, index, filter) as Array
 import Data.Maybe (Maybe(Just, Nothing), fromMaybe)
 import Data.Number (sqrt) as Num
 import Data.Int (toNumber, floor) as Int
@@ -504,6 +518,98 @@ rangeHelper current end acc =
     else rangeHelper (current + 1) end (Array.snoc acc current)
 
 -- ═════════════════════════════════════════════════════════════════════════════
+--                                                          // stroke comparison
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Check if two stroke points are at the same position.
+-- |
+-- | Uses exact floating point equality - for fuzzy comparison,
+-- | use a distance threshold instead.
+pointsEqual :: StrokePoint -> StrokePoint -> Boolean
+pointsEqual a b = a.x == b.x && a.y == b.y
+
+-- | Check if two stroke points are at different positions.
+pointsDiffer :: StrokePoint -> StrokePoint -> Boolean
+pointsDiffer a b = a.x /= b.x || a.y /= b.y
+
+-- | Check if two strokes are the same (by ID).
+strokesEqual :: Stroke -> Stroke -> Boolean
+strokesEqual a b = unwrapStrokeId a.id == unwrapStrokeId b.id
+
+-- | Check if two strokes are different (by ID).
+strokesDiffer :: Stroke -> Stroke -> Boolean
+strokesDiffer a b = unwrapStrokeId a.id /= unwrapStrokeId b.id
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                          // stroke validation
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Check if a stroke is valid for processing.
+-- |
+-- | A stroke is valid if it:
+-- | - Has at least one point
+-- | - Has non-negative brush size
+isStrokeValid :: Stroke -> Boolean
+isStrokeValid s =
+  Array.length s.points >= 1 && s.brushSize > 0.0
+
+-- | Check if a stroke is ready to be committed (finalized).
+-- |
+-- | A stroke is committable if it:
+-- | - Is no longer active (pen lifted)
+-- | - Has at least 2 points (forms a line)
+-- | - Has valid duration
+isStrokeCommittable :: Stroke -> Boolean
+isStrokeCommittable s =
+  s.active == false && Array.length s.points >= 2 && strokeDuration s >= 0.0
+
+-- | Check if stroke meets minimum length requirement.
+hasMinimumLength :: Number -> Stroke -> Boolean
+hasMinimumLength minLen s = strokeLength s >= minLen
+
+-- | Check if stroke has minimum number of points.
+hasMinimumPoints :: Int -> Stroke -> Boolean
+hasMinimumPoints minPts s = Array.length s.points >= minPts
+
+-- | Filter points with pressure above threshold.
+-- |
+-- | Useful for finding "intentional" marks vs light touches.
+filterHighPressurePoints :: Number -> Stroke -> Array StrokePoint
+filterHighPressurePoints threshold s =
+  Array.filter (\p -> p.pressure >= threshold) s.points
+
+-- | Filter points with pressure below threshold.
+-- |
+-- | Useful for finding light touches that might be accidental.
+filterLowPressurePoints :: Number -> Stroke -> Array StrokePoint
+filterLowPressurePoints threshold s =
+  Array.filter (\p -> p.pressure < threshold) s.points
+
+-- | Find the first point with pressure above threshold.
+-- |
+-- | Returns the first high-pressure point, or the first point if none qualify,
+-- | or a default point if the stroke is empty.
+findFirstHighPressurePoint :: Number -> Stroke -> StrokePoint
+findFirstHighPressurePoint threshold s =
+  let
+    highPressure = filterHighPressurePoints threshold s
+    defaultPoint = mkStrokePoint 0.0 0.0 0.0 0.0 0.0 0.0
+  in
+    fromMaybe (fromMaybe defaultPoint (Array.head s.points)) (Array.head highPressure)
+
+-- | Find the last point with pressure above threshold.
+-- |
+-- | Returns the last high-pressure point, or the last point if none qualify,
+-- | or a default point if the stroke is empty.
+findLastHighPressurePoint :: Number -> Stroke -> StrokePoint
+findLastHighPressurePoint threshold s =
+  let
+    highPressure = filterHighPressurePoints threshold s
+    defaultPoint = mkStrokePoint 0.0 0.0 0.0 0.0 0.0 0.0
+  in
+    fromMaybe (fromMaybe defaultPoint (Array.last s.points)) (Array.last highPressure)
+
+-- ═════════════════════════════════════════════════════════════════════════════
 --                                                          // stroke transforms
 -- ═════════════════════════════════════════════════════════════════════════════
 
@@ -614,9 +720,6 @@ interpolatePoints p1 p2 spacing =
       in
         mkPoint2D x y
     ) (range 0 steps)
-  where
-    floor :: Number -> Int
-    floor = Int.floor
 
 -- | Data for spawning a paint particle with full interpolated properties.
 -- |

@@ -1,0 +1,6 @@
+IMPLEMENTATION/
+output/
+.spago/
+node_modules/
+.purs-repl
+*.lock

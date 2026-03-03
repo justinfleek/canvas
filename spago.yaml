@@ -1,0 +1,33 @@
+package:
+  name: canvas
+  dependencies:
+    - prelude
+    - effect
+    - console
+    - aff
+    - arrays
+    - maybe
+    - either
+    - tuples
+    - foreign-object
+    - ordered-collections
+    - refs
+    - numbers
+    - integers
+    - strings
+    - newtype
+    - foldable-traversable
+    - halogen
+    - halogen-vdom
+    - web-dom
+    - web-events
+    - web-html
+    - web-uievents
+    - hydrogen
+
+workspace:
+  packageSet:
+    registry: 73.2.0
+  extraPackages:
+    hydrogen:
+      path: ../hydrogen

@@ -15,7 +15,7 @@ var CanvasApp = (() => {
     }
     return to;
   };
-  var __toCommonJS = (mod2) => __copyProps(__defProp({}, "__esModule", { value: true }), mod2);
+  var __toCommonJS = (mod3) => __copyProps(__defProp({}, "__esModule", { value: true }), mod3);
 
   // output/Canvas.App/index.js
   var index_exports = {};
@@ -47,18 +47,18 @@ var CanvasApp = (() => {
     result[n] = i;
     return result;
   };
-  var replicateFill = function(count, value) {
+  var replicateFill = function(count, value2) {
     if (count < 1) {
       return [];
     }
     var result = new Array(count);
-    return result.fill(value);
+    return result.fill(value2);
   };
-  var replicatePolyfill = function(count, value) {
+  var replicatePolyfill = function(count, value2) {
     var result = [];
     var n = 0;
     for (var i = 0; i < count; i++) {
-      result[n++] = value;
+      result[n++] = value2;
     }
     return result;
   };
@@ -1017,10 +1017,10 @@ var CanvasApp = (() => {
   })();
   var filter = /* @__PURE__ */ runFn2(filterImpl);
   var elemIndex = function(dictEq) {
-    var eq22 = eq(dictEq);
+    var eq23 = eq(dictEq);
     return function(x) {
       return findIndex(function(v) {
-        return eq22(v)(x);
+        return eq23(v)(x);
       });
     };
   };
@@ -1068,6 +1068,7 @@ var CanvasApp = (() => {
       return Math.pow(n, p);
     };
   };
+  var round = Math.round;
   var sin = Math.sin;
   var sqrt = Math.sqrt;
 
@@ -1098,6 +1099,9 @@ var CanvasApp = (() => {
     }
     ;
     throw new Error("Failed pattern match at Data.Int (line 72, column 1 - line 72, column 29): " + [x.constructor.name]);
+  };
+  var round2 = function($37) {
+    return unsafeClamp(round($37));
   };
   var floor2 = function($39) {
     return unsafeClamp(floor($39));
@@ -2026,6 +2030,7 @@ var CanvasApp = (() => {
   var min3 = /* @__PURE__ */ min(ordInt);
   var max12 = /* @__PURE__ */ max(ordNumber);
   var compare2 = /* @__PURE__ */ compare(ordInt);
+  var min1 = /* @__PURE__ */ min(ordNumber);
   var BrushTool = /* @__PURE__ */ (function() {
     function BrushTool2() {
     }
@@ -2222,6 +2227,23 @@ var CanvasApp = (() => {
     g: 0,
     b: 0,
     a: 1
+  };
+  var clamp01 = function(n) {
+    return max12(0)(min1(1)(n));
+  };
+  var mkColor = function(cr) {
+    return function(cg) {
+      return function(cb) {
+        return function(ca) {
+          return {
+            r: clamp01(cr),
+            g: clamp01(cg),
+            b: clamp01(cb),
+            a: clamp01(ca)
+          };
+        };
+      };
+    };
   };
   var backgroundLayerId = 0;
 
@@ -3345,14 +3367,14 @@ var CanvasApp = (() => {
   var isGravityActive = function(gs) {
     return gs.enabled && isGravitySignificant(currentGravity(gs))(gs.flatThreshold);
   };
-  var clamp01 = function(n) {
+  var clamp012 = function(n) {
     return max8(0)(min8(1)(n));
   };
   var mkGravityState = function(gravScale) {
     return {
       physics: mkCanvasPhysics(gravScale),
       enabled: true,
-      scale: clamp01(gravScale),
+      scale: clamp012(gravScale),
       flowScale: 100,
       flatThreshold: 0.1
     };
@@ -3392,8 +3414,8 @@ var CanvasApp = (() => {
   var readRef = (ref) => () => {
     return ref.value;
   };
-  var writeRef = (ref) => (value) => () => {
-    ref.value = value;
+  var writeRef = (ref) => (value2) => () => {
+    ref.value = value2;
   };
   var setGPUStatusTextImpl = (text2) => () => {
     const el = document.getElementById("gpu-backend");
@@ -3611,6 +3633,9 @@ var CanvasApp = (() => {
   };
 
   // output/Hydrogen.Schema.Color.Opacity/index.js
+  var unwrap3 = function(v) {
+    return v;
+  };
   var toUnitInterval = function(v) {
     return toNumber(v) / 100;
   };
@@ -3621,6 +3646,14 @@ var CanvasApp = (() => {
   // output/Hydrogen.Schema.Color.RGB/index.js
   var show4 = /* @__PURE__ */ show(showInt);
   var show1 = /* @__PURE__ */ show(showNumber);
+  var rgbaToRecord = function(v) {
+    return {
+      r: unwrap2(v.red),
+      g: unwrap2(v.green),
+      b: unwrap2(v.blue),
+      a: unwrap3(v.alpha)
+    };
+  };
   var rgbaToLegacyCss = function(v) {
     var a$prime = toUnitInterval(v.alpha);
     return "rgba(" + (show4(unwrap2(v.red)) + (", " + (show4(unwrap2(v.green)) + (", " + (show4(unwrap2(v.blue)) + (", " + (show1(a$prime) + ")")))))));
@@ -3635,6 +3668,24 @@ var CanvasApp = (() => {
             blue: channel(b),
             alpha: opacity(a)
           };
+        };
+      };
+    };
+  };
+  var rgbToRecord = function(v) {
+    return {
+      r: unwrap2(v.red),
+      g: unwrap2(v.green),
+      b: unwrap2(v.blue)
+    };
+  };
+  var rgb = function(r) {
+    return function(g) {
+      return function(b) {
+        return {
+          red: channel(r),
+          green: channel(g),
+          blue: channel(b)
         };
       };
     };
@@ -5478,6 +5529,424 @@ void main() {
     fragColor = vec4(v_color.rgb, v_color.a * alpha);
 }
 `;
+  var SCENE3D_VERTEX_SHADER = `#version 300 es
+precision highp float;
+
+// Vertex attributes
+in vec3 a_position;
+in vec3 a_normal;
+
+// Uniforms
+uniform mat4 u_modelMatrix;
+uniform mat4 u_viewMatrix;
+uniform mat4 u_projectionMatrix;
+uniform mat3 u_normalMatrix;
+
+// Outputs to fragment shader
+out vec3 v_position;    // World position
+out vec3 v_normal;      // World normal
+
+void main() {
+    // Transform position to world space
+    vec4 worldPos = u_modelMatrix * vec4(a_position, 1.0);
+    v_position = worldPos.xyz;
+    
+    // Transform normal to world space
+    v_normal = normalize(u_normalMatrix * a_normal);
+    
+    // Transform to clip space
+    gl_Position = u_projectionMatrix * u_viewMatrix * worldPos;
+}
+`;
+  var SCENE3D_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+
+// Inputs from vertex shader
+in vec3 v_position;
+in vec3 v_normal;
+
+// Material uniforms
+uniform vec4 u_baseColor;
+uniform float u_roughness;
+uniform float u_metalness;
+uniform vec3 u_emissive;
+
+// Lighting uniforms
+uniform vec3 u_cameraPosition;
+uniform vec3 u_ambientColor;
+uniform float u_ambientIntensity;
+
+// Directional light
+uniform vec3 u_lightDirection;
+uniform vec3 u_lightColor;
+uniform float u_lightIntensity;
+
+out vec4 fragColor;
+
+const float PI = 3.14159265359;
+
+// Fresnel-Schlick approximation
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// GGX/Trowbridge-Reitz distribution
+float distributionGGX(vec3 N, vec3 H, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    
+    float num = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
+    
+    return num / denom;
+}
+
+// Smith's geometry function
+float geometrySchlickGGX(float NdotV, float roughness) {
+    float r = (roughness + 1.0);
+    float k = (r * r) / 8.0;
+    
+    float num = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
+    
+    return num / denom;
+}
+
+float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx2 = geometrySchlickGGX(NdotV, roughness);
+    float ggx1 = geometrySchlickGGX(NdotL, roughness);
+    
+    return ggx1 * ggx2;
+}
+
+void main() {
+    vec3 N = normalize(v_normal);
+    vec3 V = normalize(u_cameraPosition - v_position);
+    
+    // Calculate base reflectivity (F0)
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, u_baseColor.rgb, u_metalness);
+    
+    // Reflectance equation
+    vec3 Lo = vec3(0.0);
+    
+    // Directional light contribution
+    {
+        vec3 L = normalize(-u_lightDirection);
+        vec3 H = normalize(V + L);
+        vec3 radiance = u_lightColor * u_lightIntensity;
+        
+        // Cook-Torrance BRDF
+        float NDF = distributionGGX(N, H, u_roughness);
+        float G = geometrySmith(N, V, L, u_roughness);
+        vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+        
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - u_metalness; // Metals have no diffuse
+        
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
+        
+        float NdotL = max(dot(N, L), 0.0);
+        Lo += (kD * u_baseColor.rgb / PI + specular) * radiance * NdotL;
+    }
+    
+    // Ambient lighting
+    vec3 ambient = u_ambientColor * u_ambientIntensity * u_baseColor.rgb;
+    
+    // Final color
+    vec3 color = ambient + Lo + u_emissive;
+    
+    // Tone mapping (simple Reinhard)
+    color = color / (color + vec3(1.0));
+    
+    // Gamma correction
+    color = pow(color, vec3(1.0 / 2.2));
+    
+    fragColor = vec4(color, u_baseColor.a);
+}
+`;
+  function mat4Multiply(a, b) {
+    const out = new Float32Array(16);
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        out[i * 4 + j] = a[i * 4 + 0] * b[0 * 4 + j] + a[i * 4 + 1] * b[1 * 4 + j] + a[i * 4 + 2] * b[2 * 4 + j] + a[i * 4 + 3] * b[3 * 4 + j];
+      }
+    }
+    return out;
+  }
+  function mat4Perspective(fovY, aspect, near, far) {
+    const f = 1 / Math.tan(fovY / 2);
+    const nf = 1 / (near - far);
+    return new Float32Array([
+      f / aspect,
+      0,
+      0,
+      0,
+      0,
+      f,
+      0,
+      0,
+      0,
+      0,
+      (far + near) * nf,
+      -1,
+      0,
+      0,
+      2 * far * near * nf,
+      0
+    ]);
+  }
+  function mat4LookAt(eye, target, up) {
+    const zAxis = normalize3(subtract3(eye, target));
+    const xAxis = normalize3(cross3(up, zAxis));
+    const yAxis = cross3(zAxis, xAxis);
+    return new Float32Array([
+      xAxis[0],
+      yAxis[0],
+      zAxis[0],
+      0,
+      xAxis[1],
+      yAxis[1],
+      zAxis[1],
+      0,
+      xAxis[2],
+      yAxis[2],
+      zAxis[2],
+      0,
+      -dot3(xAxis, eye),
+      -dot3(yAxis, eye),
+      -dot3(zAxis, eye),
+      1
+    ]);
+  }
+  function mat4Translate(x, y, z) {
+    return new Float32Array([
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      x,
+      y,
+      z,
+      1
+    ]);
+  }
+  function mat4Scale(x, y, z) {
+    return new Float32Array([
+      x,
+      0,
+      0,
+      0,
+      0,
+      y,
+      0,
+      0,
+      0,
+      0,
+      z,
+      0,
+      0,
+      0,
+      0,
+      1
+    ]);
+  }
+  function mat4FromQuaternion(q) {
+    const x = q[0], y = q[1], z = q[2], w = q[3];
+    const x2 = x + x, y2 = y + y, z2 = z + z;
+    const xx = x * x2, xy = x * y2, xz = x * z2;
+    const yy = y * y2, yz = y * z2, zz = z * z2;
+    const wx = w * x2, wy = w * y2, wz = w * z2;
+    return new Float32Array([
+      1 - (yy + zz),
+      xy + wz,
+      xz - wy,
+      0,
+      xy - wz,
+      1 - (xx + zz),
+      yz + wx,
+      0,
+      xz + wy,
+      yz - wx,
+      1 - (xx + yy),
+      0,
+      0,
+      0,
+      0,
+      1
+    ]);
+  }
+  function mat3NormalFromMat4(m) {
+    const a00 = m[0], a01 = m[1], a02 = m[2];
+    const a10 = m[4], a11 = m[5], a12 = m[6];
+    const a20 = m[8], a21 = m[9], a22 = m[10];
+    const b01 = a22 * a11 - a12 * a21;
+    const b11 = -a22 * a10 + a12 * a20;
+    const b21 = a21 * a10 - a11 * a20;
+    let det = a00 * b01 + a01 * b11 + a02 * b21;
+    if (!det) det = 1;
+    det = 1 / det;
+    return new Float32Array([
+      b01 * det,
+      (-a22 * a01 + a02 * a21) * det,
+      (a12 * a01 - a02 * a11) * det,
+      b11 * det,
+      (a22 * a00 - a02 * a20) * det,
+      (-a12 * a00 + a02 * a10) * det,
+      b21 * det,
+      (-a21 * a00 + a01 * a20) * det,
+      (a11 * a00 - a01 * a10) * det
+    ]);
+  }
+  function subtract3(a, b) {
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  }
+  function cross3(a, b) {
+    return [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0]
+    ];
+  }
+  function dot3(a, b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  }
+  function normalize3(v) {
+    const len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    if (len === 0) return [0, 0, 0];
+    return [v[0] / len, v[1] / len, v[2] / len];
+  }
+  function generateBoxGeometry(width, height, depth, wSegs, hSegs, dSegs) {
+    const positions = [];
+    const normals = [];
+    const indices = [];
+    let indexOffset = 0;
+    function buildPlane(u, v, w, udir, vdir, width2, height2, depth2, gridX, gridY) {
+      const segmentWidth = width2 / gridX;
+      const segmentHeight = height2 / gridY;
+      const widthHalf = width2 / 2;
+      const heightHalf = height2 / 2;
+      const depthHalf = depth2 / 2;
+      const gridX1 = gridX + 1;
+      const gridY1 = gridY + 1;
+      for (let iy = 0; iy < gridY1; iy++) {
+        const y = iy * segmentHeight - heightHalf;
+        for (let ix = 0; ix < gridX1; ix++) {
+          const x = ix * segmentWidth - widthHalf;
+          const pos = [0, 0, 0];
+          pos[u] = x * udir;
+          pos[v] = y * vdir;
+          pos[w] = depthHalf;
+          positions.push(...pos);
+          const norm = [0, 0, 0];
+          norm[w] = depth2 > 0 ? 1 : -1;
+          normals.push(...norm);
+        }
+      }
+      for (let iy = 0; iy < gridY; iy++) {
+        for (let ix = 0; ix < gridX; ix++) {
+          const a = indexOffset + ix + gridX1 * iy;
+          const b = indexOffset + ix + gridX1 * (iy + 1);
+          const c = indexOffset + (ix + 1) + gridX1 * (iy + 1);
+          const d = indexOffset + (ix + 1) + gridX1 * iy;
+          indices.push(a, b, d);
+          indices.push(b, c, d);
+        }
+      }
+      indexOffset += gridX1 * gridY1;
+    }
+    buildPlane(2, 1, 0, -1, -1, depth, height, width, dSegs, hSegs);
+    buildPlane(2, 1, 0, 1, -1, depth, height, -width, dSegs, hSegs);
+    buildPlane(0, 2, 1, 1, 1, width, depth, height, wSegs, dSegs);
+    buildPlane(0, 2, 1, 1, -1, width, depth, -height, wSegs, dSegs);
+    buildPlane(0, 1, 2, 1, -1, width, height, depth, wSegs, hSegs);
+    buildPlane(0, 1, 2, -1, -1, width, height, -depth, wSegs, hSegs);
+    return {
+      positions: new Float32Array(positions),
+      normals: new Float32Array(normals),
+      indices: new Uint16Array(indices)
+    };
+  }
+  function generateSphereGeometry(radius, widthSegs, heightSegs) {
+    const positions = [];
+    const normals = [];
+    const indices = [];
+    for (let y = 0; y <= heightSegs; y++) {
+      const v = y / heightSegs;
+      const theta = v * Math.PI;
+      for (let x = 0; x <= widthSegs; x++) {
+        const u = x / widthSegs;
+        const phi = u * Math.PI * 2;
+        const px2 = -radius * Math.cos(phi) * Math.sin(theta);
+        const py = radius * Math.cos(theta);
+        const pz = radius * Math.sin(phi) * Math.sin(theta);
+        positions.push(px2, py, pz);
+        const nx = px2 / radius;
+        const ny = py / radius;
+        const nz = pz / radius;
+        normals.push(nx, ny, nz);
+      }
+    }
+    for (let y = 0; y < heightSegs; y++) {
+      for (let x = 0; x < widthSegs; x++) {
+        const a = y * (widthSegs + 1) + x;
+        const b = a + widthSegs + 1;
+        indices.push(a, b, a + 1);
+        indices.push(b, b + 1, a + 1);
+      }
+    }
+    return {
+      positions: new Float32Array(positions),
+      normals: new Float32Array(normals),
+      indices: new Uint16Array(indices)
+    };
+  }
+  function generatePlaneGeometry(width, height, wSegs, hSegs) {
+    const positions = [];
+    const normals = [];
+    const indices = [];
+    const wSegs1 = wSegs + 1;
+    const hSegs1 = hSegs + 1;
+    const halfW = width / 2;
+    const halfH = height / 2;
+    for (let y = 0; y < hSegs1; y++) {
+      for (let x = 0; x < wSegs1; x++) {
+        const px2 = x / wSegs * width - halfW;
+        const py = y / hSegs * height - halfH;
+        positions.push(px2, py, 0);
+        normals.push(0, 0, 1);
+      }
+    }
+    for (let y = 0; y < hSegs; y++) {
+      for (let x = 0; x < wSegs; x++) {
+        const a = y * wSegs1 + x;
+        const b = a + wSegs1;
+        indices.push(a, b, a + 1);
+        indices.push(b, b + 1, a + 1);
+      }
+    }
+    return {
+      positions: new Float32Array(positions),
+      normals: new Float32Array(normals),
+      indices: new Uint16Array(indices)
+    };
+  }
   var isWebGL2SupportedImpl = () => {
     if (typeof document === "undefined") return false;
     const canvas = document.createElement("canvas");
@@ -5532,11 +6001,14 @@ void main() {
       gl,
       programs: {},
       buffers: {},
-      vaos: {}
+      vaos: {},
+      scene3DCache: /* @__PURE__ */ new Map()
+      // Cache for geometry buffers
     };
     try {
       renderer.programs.rect = createProgram(gl, RECT_VERTEX_SHADER, RECT_FRAGMENT_SHADER);
       renderer.programs.particle = createProgram(gl, PARTICLE_VERTEX_SHADER, PARTICLE_FRAGMENT_SHADER);
+      renderer.programs.scene3D = createProgram(gl, SCENE3D_VERTEX_SHADER, SCENE3D_FRAGMENT_SHADER);
       const quadVerts = new Float32Array([
         0,
         0,
@@ -5618,8 +6090,8 @@ void main() {
     if (particles.length > 0) {
       renderParticles(renderer, particles);
     }
-    if (scene3ds.length > 0) {
-      renderScene3DPlaceholders(renderer, scene3ds);
+    for (const scene of scene3ds) {
+      renderScene3D(renderer, scene);
     }
   };
   function renderRects(renderer, rects) {
@@ -5681,19 +6153,229 @@ void main() {
     gl.drawArraysInstanced(gl.POINTS, 0, 1, particles.length);
     gl.bindVertexArray(null);
   }
-  function renderScene3DPlaceholders(renderer, scenes) {
-    const rects = scenes.map((scene) => ({
-      x: scene.x || 0,
-      y: scene.y || 0,
-      width: scene.width || 200,
-      height: scene.height || 200,
-      fill: { r: 0.24, g: 0.31, b: 0.47, a: 0.7 },
-      // Blue-ish 3D placeholder
-      cornerRadius: { topLeft: 8, topRight: 8, bottomRight: 8, bottomLeft: 8 }
-    }));
-    if (rects.length > 0) {
-      renderRects(renderer, rects);
+  function renderScene3D(renderer, scene) {
+    const gl = renderer.gl;
+    const program = renderer.programs.scene3D;
+    const canvas = gl._canvas;
+    const vx = scene.x || 0;
+    const vy = scene.y || 0;
+    const vw = scene.width || canvas.width;
+    const vh = scene.height || canvas.height;
+    gl.viewport(vx, canvas.height - vy - vh, vw, vh);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(program);
+    const camera = scene.camera;
+    let cameraPos, cameraTarget, cameraUp, fov, near, far, aspect;
+    if (camera && camera.tag === "PerspectiveCamera3D") {
+      const params = camera.value0;
+      cameraPos = extractPosition(params.position);
+      cameraTarget = extractPosition(params.target);
+      cameraUp = extractDirection(params.up);
+      fov = extractDegrees(params.fov) * Math.PI / 180;
+      near = extractMeter(params.near);
+      far = extractMeter(params.far);
+      aspect = params.aspect || vw / vh;
+    } else {
+      cameraPos = [0, 5, 10];
+      cameraTarget = [0, 0, 0];
+      cameraUp = [0, 1, 0];
+      fov = 75 * Math.PI / 180;
+      near = 0.1;
+      far = 1e3;
+      aspect = vw / vh;
     }
+    const viewMatrix = mat4LookAt(cameraPos, cameraTarget, cameraUp);
+    const projectionMatrix = mat4Perspective(fov, aspect, near, far);
+    const camPosLoc = gl.getUniformLocation(program, "u_cameraPosition");
+    gl.uniform3fv(camPosLoc, new Float32Array(cameraPos));
+    const viewLoc = gl.getUniformLocation(program, "u_viewMatrix");
+    const projLoc = gl.getUniformLocation(program, "u_projectionMatrix");
+    gl.uniformMatrix4fv(viewLoc, false, viewMatrix);
+    gl.uniformMatrix4fv(projLoc, false, projectionMatrix);
+    let ambientColor = [0.1, 0.1, 0.1];
+    let ambientIntensity = 1;
+    let lightDirection = [-0.5, -1, -0.5];
+    let lightColor = [1, 1, 1];
+    let lightIntensity = 1;
+    const lights = scene.lights || [];
+    for (const light of lights) {
+      if (light.tag === "AmbientLight3D") {
+        const p = light.value0;
+        ambientColor = extractRGBA(p.color).slice(0, 3);
+        ambientIntensity = p.intensity || 1;
+      } else if (light.tag === "DirectionalLight3D") {
+        const p = light.value0;
+        lightColor = extractRGBA(p.color).slice(0, 3);
+        lightIntensity = p.intensity || 1;
+        lightDirection = extractDirection(p.direction);
+      }
+    }
+    const ambColLoc = gl.getUniformLocation(program, "u_ambientColor");
+    const ambIntLoc = gl.getUniformLocation(program, "u_ambientIntensity");
+    const lightDirLoc = gl.getUniformLocation(program, "u_lightDirection");
+    const lightColLoc = gl.getUniformLocation(program, "u_lightColor");
+    const lightIntLoc = gl.getUniformLocation(program, "u_lightIntensity");
+    gl.uniform3fv(ambColLoc, new Float32Array(ambientColor));
+    gl.uniform1f(ambIntLoc, ambientIntensity);
+    gl.uniform3fv(lightDirLoc, new Float32Array(normalize3(lightDirection)));
+    gl.uniform3fv(lightColLoc, new Float32Array(lightColor));
+    gl.uniform1f(lightIntLoc, lightIntensity);
+    const meshes = scene.meshes || [];
+    for (const mesh of meshes) {
+      renderMesh(renderer, program, mesh);
+    }
+    gl.disable(gl.DEPTH_TEST);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  function renderMesh(renderer, program, mesh) {
+    const gl = renderer.gl;
+    const geometry = mesh.geometry;
+    const geomData = getOrCreateGeometry(renderer, geometry);
+    if (!geomData) return;
+    const position = extractPosition(mesh.position);
+    const rotation = extractQuaternion(mesh.rotation);
+    const scale = extractScale(mesh.scale);
+    const translateMat = mat4Translate(position[0], position[1], position[2]);
+    const rotateMat = mat4FromQuaternion(rotation);
+    const scaleMat = mat4Scale(scale[0], scale[1], scale[2]);
+    const modelMatrix = mat4Multiply(mat4Multiply(translateMat, rotateMat), scaleMat);
+    const normalMatrix = mat3NormalFromMat4(modelMatrix);
+    const modelLoc = gl.getUniformLocation(program, "u_modelMatrix");
+    const normalLoc = gl.getUniformLocation(program, "u_normalMatrix");
+    gl.uniformMatrix4fv(modelLoc, false, modelMatrix);
+    gl.uniformMatrix3fv(normalLoc, false, normalMatrix);
+    const material = mesh.material;
+    let baseColor = [0.8, 0.8, 0.8, 1];
+    let roughness = 0.5;
+    let metalness = 0;
+    let emissive = [0, 0, 0];
+    if (material) {
+      if (material.tag === "BasicMaterial3D") {
+        baseColor = extractRGBA(material.value0.color);
+        roughness = 1;
+        metalness = 0;
+      } else if (material.tag === "StandardMaterial3D") {
+        const p = material.value0;
+        baseColor = extractRGBA(p.color);
+        roughness = p.roughness || 0.5;
+        metalness = p.metalness || 0;
+        emissive = extractRGBA(p.emissive).slice(0, 3).map((c, i) => c * (p.emissiveIntensity || 1));
+      } else if (material.tag === "PhysicalMaterial3D") {
+        const p = material.value0;
+        baseColor = extractRGBA(p.color);
+        roughness = p.roughness || 0.5;
+        metalness = p.metalness || 0;
+        emissive = extractRGBA(p.emissive).slice(0, 3).map((c, i) => c * (p.emissiveIntensity || 1));
+      }
+    }
+    const baseColLoc = gl.getUniformLocation(program, "u_baseColor");
+    const roughLoc = gl.getUniformLocation(program, "u_roughness");
+    const metalLoc = gl.getUniformLocation(program, "u_metalness");
+    const emissLoc = gl.getUniformLocation(program, "u_emissive");
+    gl.uniform4fv(baseColLoc, new Float32Array(baseColor));
+    gl.uniform1f(roughLoc, roughness);
+    gl.uniform1f(metalLoc, metalness);
+    gl.uniform3fv(emissLoc, new Float32Array(emissive));
+    gl.bindBuffer(gl.ARRAY_BUFFER, geomData.positionBuffer);
+    const posLoc = gl.getAttribLocation(program, "a_position");
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, geomData.normalBuffer);
+    const normLoc = gl.getAttribLocation(program, "a_normal");
+    gl.enableVertexAttribArray(normLoc);
+    gl.vertexAttribPointer(normLoc, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geomData.indexBuffer);
+    gl.drawElements(gl.TRIANGLES, geomData.indexCount, gl.UNSIGNED_SHORT, 0);
+    gl.disableVertexAttribArray(posLoc);
+    gl.disableVertexAttribArray(normLoc);
+  }
+  function getOrCreateGeometry(renderer, geometry) {
+    const gl = renderer.gl;
+    const cacheKey = JSON.stringify(geometry);
+    if (renderer.scene3DCache.has(cacheKey)) {
+      return renderer.scene3DCache.get(cacheKey);
+    }
+    let geom = null;
+    if (geometry.tag === "BoxMesh3D") {
+      const p = geometry.value0;
+      const w = extractMeter(p.width) || 1;
+      const h = extractMeter(p.height) || 1;
+      const d = extractMeter(p.depth) || 1;
+      geom = generateBoxGeometry(w, h, d, p.widthSegments || 1, p.heightSegments || 1, p.depthSegments || 1);
+    } else if (geometry.tag === "SphereMesh3D") {
+      const p = geometry.value0;
+      const r = extractMeter(p.radius) || 1;
+      geom = generateSphereGeometry(r, p.widthSegments || 32, p.heightSegments || 16);
+    } else if (geometry.tag === "PlaneMesh3D") {
+      const p = geometry.value0;
+      const w = extractMeter(p.width) || 1;
+      const h = extractMeter(p.height) || 1;
+      geom = generatePlaneGeometry(w, h, p.widthSegments || 1, p.heightSegments || 1);
+    } else {
+      geom = generateBoxGeometry(1, 1, 1, 1, 1, 1);
+    }
+    if (!geom) return null;
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, geom.positions, gl.STATIC_DRAW);
+    const normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, geom.normals, gl.STATIC_DRAW);
+    const indexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, geom.indices, gl.STATIC_DRAW);
+    const result = {
+      positionBuffer,
+      normalBuffer,
+      indexBuffer,
+      indexCount: geom.indices.length
+    };
+    renderer.scene3DCache.set(cacheKey, result);
+    return result;
+  }
+  function extractPosition(pos) {
+    if (!pos) return [0, 0, 0];
+    const x = extractPicometer(pos.x);
+    const y = extractPicometer(pos.y);
+    const z = extractPicometer(pos.z);
+    return [x, y, z];
+  }
+  function extractDirection(dir) {
+    if (!dir) return [0, -1, 0];
+    return [dir.x || 0, dir.y || -1, dir.z || 0];
+  }
+  function extractQuaternion(q) {
+    if (!q) return [0, 0, 0, 1];
+    return [q.x || 0, q.y || 0, q.z || 0, q.w || 1];
+  }
+  function extractScale(s) {
+    if (!s) return [1, 1, 1];
+    return [s.x || 1, s.y || 1, s.z || 1];
+  }
+  function extractRGBA(color) {
+    if (!color) return [1, 1, 1, 1];
+    const r = (color.r || 0) / 255;
+    const g = (color.g || 0) / 255;
+    const b = (color.b || 0) / 255;
+    const a = (color.a || 100) / 100;
+    return [r, g, b, a];
+  }
+  function extractDegrees(deg) {
+    if (typeof deg === "number") return deg;
+    if (deg && typeof deg.value === "number") return deg.value;
+    return 75;
+  }
+  function extractMeter(m) {
+    if (typeof m === "number") return m;
+    if (m && typeof m.value === "number") return m.value;
+    return 1;
+  }
+  function extractPicometer(pm) {
+    if (typeof pm === "number") return pm / 1e12;
+    if (pm && typeof pm.value === "number") return pm.value / 1e12;
+    return 0;
   }
 
   // output/Hydrogen.Target.WebGL/index.js
@@ -7154,15 +7836,205 @@ void main() {
     };
   };
 
-  // output/Canvas.State/index.js
-  var max9 = /* @__PURE__ */ max(ordNumber);
+  // output/Hydrogen.Schema.Color.Hue/index.js
+  var unwrap4 = function(v) {
+    return v;
+  };
+  var hue = function(n) {
+    return clampInt(0)(359)(n);
+  };
+
+  // output/Hydrogen.Schema.Color.Saturation/index.js
+  var unwrap5 = function(v) {
+    return v;
+  };
+  var saturation = function(n) {
+    return clampInt(0)(100)(n);
+  };
+
+  // output/Hydrogen.Schema.Color.HSV/index.js
   var min9 = /* @__PURE__ */ min(ordNumber);
+  var div13 = /* @__PURE__ */ div(euclideanRingInt);
+  var max9 = /* @__PURE__ */ max(ordNumber);
+  var value = function(n) {
+    return clampInt(0)(100)(n);
+  };
+  var unwrapValue = function(v) {
+    return v;
+  };
+  var mod2 = function(a) {
+    return function(b) {
+      return a - (div13(a)(b) * b | 0) | 0;
+    };
+  };
+  var hsva = function(h) {
+    return function(s) {
+      return function(v) {
+        return function(a) {
+          return {
+            h: hue(h),
+            s: saturation(s),
+            v: value(v),
+            a: opacity(a)
+          };
+        };
+      };
+    };
+  };
+  var hsvToRecord = function(v) {
+    return {
+      h: unwrap4(v.h),
+      s: unwrap5(v.s),
+      v: unwrapValue(v.v)
+    };
+  };
+  var hsv = function(h) {
+    return function(s) {
+      return function(v) {
+        return {
+          h: hue(h),
+          s: saturation(s),
+          v: value(v)
+        };
+      };
+    };
+  };
+  var floor3 = function(n) {
+    return round2(n - 0.5);
+  };
+  var modFloat = function(a) {
+    return function(b) {
+      return a - toNumber(floor3(a / b)) * b;
+    };
+  };
+  var fromRGB = function(rgbColor) {
+    var rec = rgbToRecord(rgbColor);
+    var r = toNumber(rec.r) / 255;
+    var g = toNumber(rec.g) / 255;
+    var b = toNumber(rec.b) / 255;
+    var cMax = max9(r)(max9(g)(b));
+    var cMin = min9(r)(min9(g)(b));
+    var delta = cMax - cMin;
+    var s$prime = (function() {
+      var $129 = cMax === 0;
+      if ($129) {
+        return 0;
+      }
+      ;
+      return delta / cMax;
+    })();
+    var h$prime = (function() {
+      var $130 = delta === 0;
+      if ($130) {
+        return 0;
+      }
+      ;
+      var $131 = cMax === r;
+      if ($131) {
+        return 60 * modFloat((g - b) / delta)(6);
+      }
+      ;
+      var $132 = cMax === g;
+      if ($132) {
+        return 60 * ((b - r) / delta + 2);
+      }
+      ;
+      return 60 * ((r - g) / delta + 4);
+    })();
+    var hNorm = (function() {
+      var $133 = h$prime < 0;
+      if ($133) {
+        return h$prime + 360;
+      }
+      ;
+      return h$prime;
+    })();
+    return hsv(round2(hNorm))(round2(s$prime * 100))(round2(cMax * 100));
+  };
+  var fromRGBA = function(rgbaColor) {
+    var rec = rgbaToRecord(rgbaColor);
+    var hsvPart = fromRGB(rgb(rec.r)(rec.g)(rec.b));
+    var hsvRec = hsvToRecord(hsvPart);
+    return hsva(hsvRec.h)(hsvRec.s)(hsvRec.v)(rec.a);
+  };
+  var toRGB = function(v) {
+    var v$prime = toNumber(unwrapValue(v.v)) / 100;
+    var s$prime = toNumber(unwrap5(v.s)) / 100;
+    var p = v$prime * (1 - s$prime);
+    var h$prime = toNumber(unwrap4(v.h)) / 60;
+    var i = floor3(h$prime);
+    var f = h$prime - toNumber(i);
+    var q = v$prime * (1 - s$prime * f);
+    var t = v$prime * (1 - s$prime * (1 - f));
+    var rgb$prime = (function() {
+      var v1 = mod2(i)(6);
+      if (v1 === 0) {
+        return {
+          r: v$prime,
+          g: t,
+          b: p
+        };
+      }
+      ;
+      if (v1 === 1) {
+        return {
+          r: q,
+          g: v$prime,
+          b: p
+        };
+      }
+      ;
+      if (v1 === 2) {
+        return {
+          r: p,
+          g: v$prime,
+          b: t
+        };
+      }
+      ;
+      if (v1 === 3) {
+        return {
+          r: p,
+          g: q,
+          b: v$prime
+        };
+      }
+      ;
+      if (v1 === 4) {
+        return {
+          r: t,
+          g: p,
+          b: v$prime
+        };
+      }
+      ;
+      return {
+        r: v$prime,
+        g: p,
+        b: q
+      };
+    })();
+    return rgb(round2(rgb$prime.r * 255))(round2(rgb$prime.g * 255))(round2(rgb$prime.b * 255));
+  };
+  var toRGBA = function(v) {
+    var rgbPart = toRGB({
+      h: v.h,
+      s: v.s,
+      v: v.v
+    });
+    var rec = rgbToRecord(rgbPart);
+    return rgba(rec.r)(rec.g)(rec.b)(unwrap3(v.a));
+  };
+
+  // output/Canvas.State/index.js
+  var max10 = /* @__PURE__ */ max(ordNumber);
+  var min10 = /* @__PURE__ */ min(ordNumber);
   var $$delete3 = /* @__PURE__ */ $$delete(ordInt);
   var zoomViewportAt = function(centerX) {
     return function(centerY) {
       return function(scaleDelta) {
         return function(s) {
-          var newScale = max9(s.viewportState.minScale)(min9(s.viewportState.maxScale)(s.viewportState.scale * scaleDelta));
+          var newScale = max10(s.viewportState.minScale)(min10(s.viewportState.maxScale)(s.viewportState.scale * scaleDelta));
           var scaleRatio = newScale / s.viewportState.scale;
           var newPanY = centerY - (centerY - s.viewportState.panY) * scaleRatio;
           var newPanX = centerX - (centerX - s.viewportState.panX) * scaleRatio;
@@ -7201,7 +8073,7 @@ void main() {
   };
   var zoomViewport = function(scaleDelta) {
     return function(s) {
-      var newScale = max9(s.viewportState.minScale)(min9(s.viewportState.maxScale)(s.viewportState.scale * scaleDelta));
+      var newScale = max10(s.viewportState.minScale)(min10(s.viewportState.maxScale)(s.viewportState.scale * scaleDelta));
       return {
         canvasBounds: s.canvasBounds,
         tool: s.tool,
@@ -7324,7 +8196,7 @@ void main() {
       };
     }
     ;
-    throw new Error("Failed pattern match at Canvas.State (line 959, column 3 - line 969, column 12): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.State (line 1101, column 3 - line 1111, column 12): " + [v.constructor.name]);
   };
   var triggerEasterEggConfetti = function(x) {
     return function(y) {
@@ -7529,7 +8401,7 @@ void main() {
         return setLayerVisibility(lid)(!currentVis)(s);
       }
       ;
-      throw new Error("Failed pattern match at Canvas.State (line 750, column 3 - line 754, column 51): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.State (line 892, column 3 - line 896, column 51): " + [v.constructor.name]);
     };
   };
   var setGravityEnabled2 = function(en) {
@@ -7558,6 +8430,84 @@ void main() {
       };
     };
   };
+  var setBrushWetness = function(w) {
+    return function(s) {
+      return {
+        canvasBounds: s.canvasBounds,
+        viewportState: s.viewportState,
+        tool: s.tool,
+        layers: s.layers,
+        paint: s.paint,
+        layer3DContent: s.layer3DContent,
+        gravity: s.gravity,
+        playing: s.playing,
+        frameCount: s.frameCount,
+        lastFrameTime: s.lastFrameTime,
+        undoStack: s.undoStack,
+        redoStack: s.redoStack,
+        maxHistorySize: s.maxHistorySize,
+        easterEggs: s.easterEggs,
+        gesture: s.gesture,
+        lastPointerX: s.lastPointerX,
+        lastPointerY: s.lastPointerY,
+        pointerDown: s.pointerDown,
+        showDebugOverlay: s.showDebugOverlay,
+        brush: {
+          size: s.brush.size,
+          opacity: s.brush.opacity,
+          color: s.brush.color,
+          colorHSV: s.brush.colorHSV,
+          preset: s.brush.preset,
+          presetName: s.brush.presetName,
+          spacing: s.brush.spacing,
+          hardness: s.brush.hardness,
+          viscosity: s.brush.viscosity,
+          dilution: s.brush.dilution,
+          pigmentLoad: s.brush.pigmentLoad,
+          wetness: max10(0)(min10(100)(w))
+        }
+      };
+    };
+  };
+  var setBrushViscosity = function(v) {
+    return function(s) {
+      return {
+        canvasBounds: s.canvasBounds,
+        viewportState: s.viewportState,
+        tool: s.tool,
+        layers: s.layers,
+        paint: s.paint,
+        layer3DContent: s.layer3DContent,
+        gravity: s.gravity,
+        playing: s.playing,
+        frameCount: s.frameCount,
+        lastFrameTime: s.lastFrameTime,
+        undoStack: s.undoStack,
+        redoStack: s.redoStack,
+        maxHistorySize: s.maxHistorySize,
+        easterEggs: s.easterEggs,
+        gesture: s.gesture,
+        lastPointerX: s.lastPointerX,
+        lastPointerY: s.lastPointerY,
+        pointerDown: s.pointerDown,
+        showDebugOverlay: s.showDebugOverlay,
+        brush: {
+          size: s.brush.size,
+          opacity: s.brush.opacity,
+          color: s.brush.color,
+          colorHSV: s.brush.colorHSV,
+          preset: s.brush.preset,
+          presetName: s.brush.presetName,
+          spacing: s.brush.spacing,
+          hardness: s.brush.hardness,
+          wetness: s.brush.wetness,
+          dilution: s.brush.dilution,
+          pigmentLoad: s.brush.pigmentLoad,
+          viscosity: max10(0)(min10(100)(v))
+        }
+      };
+    };
+  };
   var setBrushSize = function(sz) {
     return function(s) {
       return {
@@ -7583,16 +8533,23 @@ void main() {
         brush: {
           opacity: s.brush.opacity,
           color: s.brush.color,
+          colorHSV: s.brush.colorHSV,
           preset: s.brush.preset,
+          presetName: s.brush.presetName,
           spacing: s.brush.spacing,
           hardness: s.brush.hardness,
-          size: max9(1)(min9(500)(sz))
+          wetness: s.brush.wetness,
+          viscosity: s.brush.viscosity,
+          dilution: s.brush.dilution,
+          pigmentLoad: s.brush.pigmentLoad,
+          size: max10(1)(min10(500)(sz))
         }
       };
     };
   };
   var setBrushPreset = function(p) {
     return function(s) {
+      var props = presetProperties(p);
       return {
         canvasBounds: s.canvasBounds,
         viewportState: s.viewportState,
@@ -7616,9 +8573,15 @@ void main() {
           size: s.brush.size,
           opacity: s.brush.opacity,
           color: s.brush.color,
+          colorHSV: s.brush.colorHSV,
+          presetName: s.brush.presetName,
           spacing: s.brush.spacing,
           hardness: s.brush.hardness,
-          preset: p
+          dilution: s.brush.dilution,
+          pigmentLoad: s.brush.pigmentLoad,
+          preset: p,
+          wetness: unwrapWetness(props.wetness),
+          viscosity: unwrapViscosity(props.viscosity)
         },
         paint: {
           particles: s.paint.particles,
@@ -7630,6 +8593,45 @@ void main() {
           gravityY: s.paint.gravityY,
           nextId: s.paint.nextId,
           preset: p
+        }
+      };
+    };
+  };
+  var setBrushPigmentLoad = function(p) {
+    return function(s) {
+      return {
+        canvasBounds: s.canvasBounds,
+        viewportState: s.viewportState,
+        tool: s.tool,
+        layers: s.layers,
+        paint: s.paint,
+        layer3DContent: s.layer3DContent,
+        gravity: s.gravity,
+        playing: s.playing,
+        frameCount: s.frameCount,
+        lastFrameTime: s.lastFrameTime,
+        undoStack: s.undoStack,
+        redoStack: s.redoStack,
+        maxHistorySize: s.maxHistorySize,
+        easterEggs: s.easterEggs,
+        gesture: s.gesture,
+        lastPointerX: s.lastPointerX,
+        lastPointerY: s.lastPointerY,
+        pointerDown: s.pointerDown,
+        showDebugOverlay: s.showDebugOverlay,
+        brush: {
+          size: s.brush.size,
+          opacity: s.brush.opacity,
+          color: s.brush.color,
+          colorHSV: s.brush.colorHSV,
+          preset: s.brush.preset,
+          presetName: s.brush.presetName,
+          spacing: s.brush.spacing,
+          hardness: s.brush.hardness,
+          wetness: s.brush.wetness,
+          viscosity: s.brush.viscosity,
+          dilution: s.brush.dilution,
+          pigmentLoad: max10(0)(min10(100)(p))
         }
       };
     };
@@ -7659,15 +8661,21 @@ void main() {
         brush: {
           size: s.brush.size,
           color: s.brush.color,
+          colorHSV: s.brush.colorHSV,
           preset: s.brush.preset,
+          presetName: s.brush.presetName,
           spacing: s.brush.spacing,
           hardness: s.brush.hardness,
-          opacity: max9(0)(min9(1)(op))
+          wetness: s.brush.wetness,
+          viscosity: s.brush.viscosity,
+          dilution: s.brush.dilution,
+          pigmentLoad: s.brush.pigmentLoad,
+          opacity: max10(0)(min10(1)(op))
         }
       };
     };
   };
-  var setBrushColor = function(c) {
+  var setBrushDilution = function(d) {
     return function(s) {
       return {
         canvasBounds: s.canvasBounds,
@@ -7692,10 +8700,16 @@ void main() {
         brush: {
           size: s.brush.size,
           opacity: s.brush.opacity,
+          color: s.brush.color,
+          colorHSV: s.brush.colorHSV,
           preset: s.brush.preset,
+          presetName: s.brush.presetName,
           spacing: s.brush.spacing,
           hardness: s.brush.hardness,
-          color: c
+          wetness: s.brush.wetness,
+          viscosity: s.brush.viscosity,
+          pigmentLoad: s.brush.pigmentLoad,
+          dilution: max10(0)(min10(100)(d))
         }
       };
     };
@@ -7785,8 +8799,8 @@ void main() {
   };
   var removeLayer2 = function(lid) {
     return function(s) {
-      var $87 = unwrapLayerId(lid) === 0;
-      if ($87) {
+      var $99 = unwrapLayerId(lid) === 0;
+      if ($99) {
         return s;
       }
       ;
@@ -7849,7 +8863,7 @@ void main() {
       };
     }
     ;
-    throw new Error("Failed pattern match at Canvas.State (line 974, column 3 - line 984, column 12): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.State (line 1116, column 3 - line 1126, column 12): " + [v.constructor.name]);
   };
   var pushHistory = function(label) {
     return function(s) {
@@ -7859,8 +8873,8 @@ void main() {
       };
       var newUndo = snoc(s.undoStack)(entry);
       var trimmedUndo = (function() {
-        var $92 = length(newUndo) > s.maxHistorySize;
-        if ($92) {
+        var $104 = length(newUndo) > s.maxHistorySize;
+        if ($104) {
           var v = unsnoc(newUndo);
           if (v instanceof Just) {
             return v.value0.init;
@@ -7870,7 +8884,7 @@ void main() {
             return newUndo;
           }
           ;
-          throw new Error("Failed pattern match at Canvas.State (line 947, column 14 - line 949, column 29): " + [v.constructor.name]);
+          throw new Error("Failed pattern match at Canvas.State (line 1089, column 14 - line 1091, column 29): " + [v.constructor.name]);
         }
         ;
         return newUndo;
@@ -7913,14 +8927,14 @@ void main() {
         var current = computeTwoFingerData(point1)(point2);
         if (s.gesture.active) {
           var scaleDelta = (function() {
-            var $97 = s.gesture.lastDistance > 1e-3;
-            if ($97) {
+            var $109 = s.gesture.lastDistance > 1e-3;
+            if ($109) {
               return current.distance / s.gesture.lastDistance;
             }
             ;
             return 1;
           })();
-          var newScale = max9(s.viewportState.minScale)(min9(s.viewportState.maxScale)(s.viewportState.scale * scaleDelta));
+          var newScale = max10(s.viewportState.minScale)(min10(s.viewportState.maxScale)(s.viewportState.scale * scaleDelta));
           var newGesture = {
             active: s.gesture.active,
             initialAngle: s.gesture.initialAngle,
@@ -8141,22 +9155,6 @@ void main() {
       };
     };
   };
-  var mkBrushConfig = function(sz) {
-    return function(op) {
-      return function(col) {
-        return function(pre) {
-          return {
-            size: max9(1)(min9(500)(sz)),
-            opacity: max9(0)(min9(1)(op)),
-            color: col,
-            preset: pre,
-            spacing: 0.25,
-            hardness: 0.8
-          };
-        };
-      };
-    };
-  };
   var layerStack = function(s) {
     return s.layers;
   };
@@ -8165,6 +9163,9 @@ void main() {
   };
   var isPlaying = function(s) {
     return s.playing;
+  };
+  var int255ToColor = function(n) {
+    return toNumber(n) / 255;
   };
   var initialViewport = {
     panX: 0,
@@ -8210,6 +9211,50 @@ void main() {
     lastDistance: 0,
     lastAngle: 0
   };
+  var hsvaToColor = function(hsvaColor) {
+    var rgbaColor = toRGBA(hsvaColor);
+    var rec = rgbaToRecord(rgbaColor);
+    return mkColor(int255ToColor(rec.r))(int255ToColor(rec.g))(int255ToColor(rec.b))(int255ToColor(rec.a));
+  };
+  var setBrushColorHSV = function(hsv2) {
+    return function(s) {
+      return {
+        canvasBounds: s.canvasBounds,
+        viewportState: s.viewportState,
+        tool: s.tool,
+        layers: s.layers,
+        paint: s.paint,
+        layer3DContent: s.layer3DContent,
+        gravity: s.gravity,
+        playing: s.playing,
+        frameCount: s.frameCount,
+        lastFrameTime: s.lastFrameTime,
+        undoStack: s.undoStack,
+        redoStack: s.redoStack,
+        maxHistorySize: s.maxHistorySize,
+        easterEggs: s.easterEggs,
+        gesture: s.gesture,
+        lastPointerX: s.lastPointerX,
+        lastPointerY: s.lastPointerY,
+        pointerDown: s.pointerDown,
+        showDebugOverlay: s.showDebugOverlay,
+        brush: {
+          size: s.brush.size,
+          opacity: s.brush.opacity,
+          preset: s.brush.preset,
+          presetName: s.brush.presetName,
+          spacing: s.brush.spacing,
+          hardness: s.brush.hardness,
+          wetness: s.brush.wetness,
+          viscosity: s.brush.viscosity,
+          dilution: s.brush.dilution,
+          pigmentLoad: s.brush.pigmentLoad,
+          colorHSV: hsv2,
+          color: hsvaToColor(hsv2)
+        }
+      };
+    };
+  };
   var gravityState = function(s) {
     return s.gravity;
   };
@@ -8239,6 +9284,42 @@ void main() {
   };
   var easterEggState = function(s) {
     return s.easterEggs;
+  };
+  var currentTool = function(s) {
+    return s.tool;
+  };
+  var colorToInt255 = function(n) {
+    var clamped = max10(0)(min10(1)(n));
+    return round2(clamped * 255);
+  };
+  var mkBrushConfig = function(sz) {
+    return function(op) {
+      return function(col) {
+        return function(pre) {
+          var r255 = colorToInt255(col.r);
+          var props = presetProperties(pre);
+          var g255 = colorToInt255(col.g);
+          var b255 = colorToInt255(col.b);
+          var a255 = colorToInt255(col.a);
+          var rgbaColor = rgba(r255)(g255)(b255)(a255);
+          var hsvaColor = fromRGBA(rgbaColor);
+          return {
+            size: max10(1)(min10(500)(sz)),
+            opacity: max10(0)(min10(1)(op)),
+            color: col,
+            colorHSV: hsvaColor,
+            preset: pre,
+            presetName: "Hard Round",
+            spacing: 0.25,
+            hardness: 0.8,
+            wetness: unwrapWetness(props.wetness),
+            viscosity: unwrapViscosity(props.viscosity),
+            dilution: 50,
+            pigmentLoad: 75
+          };
+        };
+      };
+    };
   };
   var defaultBrushConfig = /* @__PURE__ */ (function() {
     return mkBrushConfig(20)(1)(colorBlack)(Watercolor.value);
@@ -8273,8 +9354,48 @@ void main() {
     };
   };
   var initialAppState = /* @__PURE__ */ mkAppState(1920)(1080);
-  var currentTool = function(s) {
-    return s.tool;
+  var colorToHSVA = function(c) {
+    var rgbaColor = rgba(colorToInt255(c.r))(colorToInt255(c.g))(colorToInt255(c.b))(colorToInt255(c.a));
+    return fromRGBA(rgbaColor);
+  };
+  var setBrushColor = function(c) {
+    return function(s) {
+      return {
+        canvasBounds: s.canvasBounds,
+        viewportState: s.viewportState,
+        tool: s.tool,
+        layers: s.layers,
+        paint: s.paint,
+        layer3DContent: s.layer3DContent,
+        gravity: s.gravity,
+        playing: s.playing,
+        frameCount: s.frameCount,
+        lastFrameTime: s.lastFrameTime,
+        undoStack: s.undoStack,
+        redoStack: s.redoStack,
+        maxHistorySize: s.maxHistorySize,
+        easterEggs: s.easterEggs,
+        gesture: s.gesture,
+        lastPointerX: s.lastPointerX,
+        lastPointerY: s.lastPointerY,
+        pointerDown: s.pointerDown,
+        showDebugOverlay: s.showDebugOverlay,
+        brush: {
+          size: s.brush.size,
+          opacity: s.brush.opacity,
+          preset: s.brush.preset,
+          presetName: s.brush.presetName,
+          spacing: s.brush.spacing,
+          hardness: s.brush.hardness,
+          wetness: s.brush.wetness,
+          viscosity: s.brush.viscosity,
+          dilution: s.brush.dilution,
+          pigmentLoad: s.brush.pigmentLoad,
+          color: c,
+          colorHSV: colorToHSVA(c)
+        }
+      };
+    };
   };
   var clearActiveLayer = function(s) {
     return {
@@ -8305,6 +9426,12 @@ void main() {
   };
   var canRedo = function(s) {
     return length(s.redoStack) > 0;
+  };
+  var brushPresetName = function(b) {
+    return b.presetName;
+  };
+  var brushPreset = function(b) {
+    return b.preset;
   };
   var brushConfig = function(s) {
     return s.brush;
@@ -8401,9 +9528,15 @@ void main() {
                 viewportState: s.viewportState,
                 brush: {
                   color: s.brush.color,
+                  colorHSV: s.brush.colorHSV,
+                  dilution: s.brush.dilution,
                   hardness: s.brush.hardness,
+                  pigmentLoad: s.brush.pigmentLoad,
                   preset: s.brush.preset,
+                  presetName: s.brush.presetName,
                   spacing: s.brush.spacing,
+                  viscosity: s.brush.viscosity,
+                  wetness: s.brush.wetness,
                   size: effectiveSize,
                   opacity: effectiveOpacity
                 }
@@ -8519,9 +9652,6 @@ void main() {
   var activeLayerId = function(s) {
     return stackActiveLayerId(s.layers);
   };
-
-  // output/Canvas.View/foreign.js
-  var unsafeNumberToInt = (n) => Math.trunc(n);
 
   // output/Data.String.CodeUnits/foreign.js
   var toCharArray = function(s) {
@@ -9160,6 +10290,37 @@ void main() {
     ;
     throw new Error("Failed pattern match at Hydrogen.Schema.Brush.WetMedia.Types (line 112, column 1 - line 112, column 50): " + [v.constructor.name]);
   };
+  var eqWetMediaType = {
+    eq: function(x) {
+      return function(y) {
+        if (x instanceof Watercolor2 && y instanceof Watercolor2) {
+          return true;
+        }
+        ;
+        if (x instanceof OilPaint2 && y instanceof OilPaint2) {
+          return true;
+        }
+        ;
+        if (x instanceof Acrylic2 && y instanceof Acrylic2) {
+          return true;
+        }
+        ;
+        if (x instanceof Gouache2 && y instanceof Gouache2) {
+          return true;
+        }
+        ;
+        if (x instanceof Ink2 && y instanceof Ink2) {
+          return true;
+        }
+        ;
+        if (x instanceof WetIntoWet && y instanceof WetIntoWet) {
+          return true;
+        }
+        ;
+        return false;
+      };
+    }
+  };
   var allWetMediaTypes = /* @__PURE__ */ (function() {
     return [Watercolor2.value, OilPaint2.value, Acrylic2.value, Gouache2.value, Ink2.value, WetIntoWet.value];
   })();
@@ -9168,12 +10329,64 @@ void main() {
   var eq2 = /* @__PURE__ */ eq(eqTool);
   var append2 = /* @__PURE__ */ append(semigroupArray);
   var show6 = /* @__PURE__ */ show(showTool);
-  var show22 = /* @__PURE__ */ show(showNumber);
-  var show42 = /* @__PURE__ */ show(showBoolean);
-  var show52 = /* @__PURE__ */ show(showInt);
+  var show22 = /* @__PURE__ */ show(showInt);
+  var show32 = /* @__PURE__ */ show(showNumber);
+  var show52 = /* @__PURE__ */ show(showBoolean);
   var map8 = /* @__PURE__ */ map(functorArray);
   var eq12 = /* @__PURE__ */ eq(eqLayerId);
-  var div13 = /* @__PURE__ */ div(euclideanRingInt);
+  var eq22 = /* @__PURE__ */ eq(eqWetMediaType);
+  var max11 = /* @__PURE__ */ max(ordNumber);
+  var min11 = /* @__PURE__ */ min(ordNumber);
+  var div14 = /* @__PURE__ */ div(euclideanRingInt);
+  var CategoryEssentials = /* @__PURE__ */ (function() {
+    function CategoryEssentials2() {
+    }
+    ;
+    CategoryEssentials2.value = new CategoryEssentials2();
+    return CategoryEssentials2;
+  })();
+  var CategoryPencil = /* @__PURE__ */ (function() {
+    function CategoryPencil2() {
+    }
+    ;
+    CategoryPencil2.value = new CategoryPencil2();
+    return CategoryPencil2;
+  })();
+  var CategoryInk = /* @__PURE__ */ (function() {
+    function CategoryInk2() {
+    }
+    ;
+    CategoryInk2.value = new CategoryInk2();
+    return CategoryInk2;
+  })();
+  var CategoryWatercolor = /* @__PURE__ */ (function() {
+    function CategoryWatercolor2() {
+    }
+    ;
+    CategoryWatercolor2.value = new CategoryWatercolor2();
+    return CategoryWatercolor2;
+  })();
+  var CategoryOil = /* @__PURE__ */ (function() {
+    function CategoryOil2() {
+    }
+    ;
+    CategoryOil2.value = new CategoryOil2();
+    return CategoryOil2;
+  })();
+  var CategoryDigital = /* @__PURE__ */ (function() {
+    function CategoryDigital2() {
+    }
+    ;
+    CategoryDigital2.value = new CategoryDigital2();
+    return CategoryDigital2;
+  })();
+  var CategoryExpressive = /* @__PURE__ */ (function() {
+    function CategoryExpressive2() {
+    }
+    ;
+    CategoryExpressive2.value = new CategoryExpressive2();
+    return CategoryExpressive2;
+  })();
   var ToolSelected = /* @__PURE__ */ (function() {
     function ToolSelected2(value0) {
       this.value0 = value0;
@@ -9193,6 +10406,16 @@ void main() {
       return new BrushPresetSelected2(value0);
     };
     return BrushPresetSelected2;
+  })();
+  var BrushCategorySelected = /* @__PURE__ */ (function() {
+    function BrushCategorySelected2(value0) {
+      this.value0 = value0;
+    }
+    ;
+    BrushCategorySelected2.create = function(value0) {
+      return new BrushCategorySelected2(value0);
+    };
+    return BrushCategorySelected2;
   })();
   var MediaTypeSelected = /* @__PURE__ */ (function() {
     function MediaTypeSelected2(value0) {
@@ -9214,6 +10437,22 @@ void main() {
     };
     return ColorChanged2;
   })();
+  var ColorHSVChanged = /* @__PURE__ */ (function() {
+    function ColorHSVChanged2(value0, value1, value2) {
+      this.value0 = value0;
+      this.value1 = value1;
+      this.value2 = value2;
+    }
+    ;
+    ColorHSVChanged2.create = function(value0) {
+      return function(value1) {
+        return function(value2) {
+          return new ColorHSVChanged2(value0, value1, value2);
+        };
+      };
+    };
+    return ColorHSVChanged2;
+  })();
   var BrushSizeChanged = /* @__PURE__ */ (function() {
     function BrushSizeChanged2(value0) {
       this.value0 = value0;
@@ -9233,6 +10472,46 @@ void main() {
       return new BrushOpacityChanged2(value0);
     };
     return BrushOpacityChanged2;
+  })();
+  var WetnessChanged = /* @__PURE__ */ (function() {
+    function WetnessChanged2(value0) {
+      this.value0 = value0;
+    }
+    ;
+    WetnessChanged2.create = function(value0) {
+      return new WetnessChanged2(value0);
+    };
+    return WetnessChanged2;
+  })();
+  var ViscosityChanged = /* @__PURE__ */ (function() {
+    function ViscosityChanged2(value0) {
+      this.value0 = value0;
+    }
+    ;
+    ViscosityChanged2.create = function(value0) {
+      return new ViscosityChanged2(value0);
+    };
+    return ViscosityChanged2;
+  })();
+  var DilutionChanged = /* @__PURE__ */ (function() {
+    function DilutionChanged2(value0) {
+      this.value0 = value0;
+    }
+    ;
+    DilutionChanged2.create = function(value0) {
+      return new DilutionChanged2(value0);
+    };
+    return DilutionChanged2;
+  })();
+  var PigmentLoadChanged = /* @__PURE__ */ (function() {
+    function PigmentLoadChanged2(value0) {
+      this.value0 = value0;
+    }
+    ;
+    PigmentLoadChanged2.create = function(value0) {
+      return new PigmentLoadChanged2(value0);
+    };
+    return PigmentLoadChanged2;
   })();
   var PointerDown = /* @__PURE__ */ (function() {
     function PointerDown2(value0) {
@@ -9556,19 +10835,53 @@ void main() {
   var stepForRange = function(minVal) {
     return function(maxVal) {
       var range3 = maxVal - minVal;
-      var $99 = range3 > 100;
-      if ($99) {
+      var $126 = range3 > 100;
+      if ($126) {
         return 10;
       }
       ;
-      var $100 = range3 > 10;
-      if ($100) {
+      var $127 = range3 > 10;
+      if ($127) {
         return 1;
       }
       ;
       return 0.1;
     };
   };
+  var showBrushCategory = {
+    show: function(v) {
+      if (v instanceof CategoryEssentials) {
+        return "Essentials";
+      }
+      ;
+      if (v instanceof CategoryPencil) {
+        return "Pencil";
+      }
+      ;
+      if (v instanceof CategoryInk) {
+        return "Ink";
+      }
+      ;
+      if (v instanceof CategoryWatercolor) {
+        return "Watercolor";
+      }
+      ;
+      if (v instanceof CategoryOil) {
+        return "Oil";
+      }
+      ;
+      if (v instanceof CategoryDigital) {
+        return "Digital";
+      }
+      ;
+      if (v instanceof CategoryExpressive) {
+        return "Expressive";
+      }
+      ;
+      throw new Error("Failed pattern match at Canvas.View (line 277, column 1 - line 284, column 41): " + [v.constructor.name]);
+    }
+  };
+  var show62 = /* @__PURE__ */ show(showBrushCategory);
   var shortPresetName = function(name2) {
     return name2;
   };
@@ -9577,9 +10890,9 @@ void main() {
   };
   var renderStatusBar = function(state2) {
     var particleCount2 = particleCount(paintSystem(state2));
-    return div_(append2([class_("canvas-statusbar"), role("contentinfo"), ariaLabel("Canvas status"), ariaLive("polite"), ariaAtomic("false")])(styles([new Tuple("display", "flex"), new Tuple("gap", "16px"), new Tuple("padding", "4px 8px"), new Tuple("background", "#1a1a2e"), new Tuple("border-top", "1px solid #333"), new Tuple("font-size", "11px"), new Tuple("color", "#888")])))([span_([ariaLabel("Particle count: " + show52(particleCount2))])([text("Particles: " + show52(particleCount2))]), span_([ariaLabel("Layer count: " + show52(layerCount2(state2)))])([text("Layers: " + show52(layerCount2(state2)))]), span_(append2([id_("gpu-backend"), ariaLabel("GPU rendering backend")])(styles([new Tuple("color", "#4a9eff"), new Tuple("font-weight", "bold")])))([text("GPU: Detecting...")]), span_([])([text((function() {
-      var $133 = canUndo(state2);
-      if ($133) {
+    return div_(append2([class_("canvas-statusbar"), role("contentinfo"), ariaLabel("Canvas status"), ariaLive("polite"), ariaAtomic("false")])(styles([new Tuple("display", "flex"), new Tuple("gap", "16px"), new Tuple("padding", "4px 8px"), new Tuple("background", "#1a1a2e"), new Tuple("border-top", "1px solid #333"), new Tuple("font-size", "11px"), new Tuple("color", "#888")])))([span_([ariaLabel("Particle count: " + show22(particleCount2))])([text("Particles: " + show22(particleCount2))]), span_([ariaLabel("Layer count: " + show22(layerCount2(state2)))])([text("Layers: " + show22(layerCount2(state2)))]), span_(append2([id_("gpu-backend"), ariaLabel("GPU rendering backend")])(styles([new Tuple("color", "#4a9eff"), new Tuple("font-weight", "bold")])))([text("GPU: Detecting...")]), span_([])([text((function() {
+      var $169 = canUndo(state2);
+      if ($169) {
         return "Undo available";
       }
       ;
@@ -9590,7 +10903,7 @@ void main() {
     var radius = particleRadius(p);
     var pos = particlePosition(p);
     var color = particleColorHex(p);
-    return circle_([attr("cx")(show22(pos.x)), attr("cy")(show22(pos.y)), attr("r")(show22(radius)), attr("fill")(color), attr("opacity")("0.8")]);
+    return circle_([attr("cx")(show32(pos.x)), attr("cy")(show32(pos.y)), attr("r")(show32(radius)), attr("fill")(color), attr("opacity")("0.8")]);
   };
   var renderParticlesSVGFallback = function(state2) {
     var particles = allParticles(paintSystem(state2));
@@ -9630,8 +10943,8 @@ void main() {
           ;
           return "#333";
         })()), new Tuple("cursor", "pointer"), new Tuple("padding", "0")])))([]), button_(append2([class_("layer-name"), onClick(new LayerSelected(lid)), title(layerName(layer))])(styles([new Tuple("flex", "1"), new Tuple("border", "none"), new Tuple("background", "transparent"), new Tuple("color", textColor), new Tuple("cursor", "pointer"), new Tuple("text-align", "left"), new Tuple("padding", "2px 4px"), new Tuple("overflow", "hidden"), new Tuple("text-overflow", "ellipsis"), new Tuple("white-space", "nowrap")])))([text(layerName(layer))]), (function() {
-          var $138 = totalLayers > 1 && !isBackground;
-          if ($138) {
+          var $174 = totalLayers > 1 && !isBackground;
+          if ($174) {
             return div_(styles([new Tuple("display", "flex"), new Tuple("gap", "2px")]))([button_(append2([class_("move-up-btn"), onClick(new MoveLayerUp(lid)), title("Move layer up")])(styles([new Tuple("width", "16px"), new Tuple("height", "16px"), new Tuple("border", "none"), new Tuple("border-radius", "2px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#ccc"), new Tuple("cursor", "pointer"), new Tuple("font-size", "10px"), new Tuple("padding", "0")])))([text("^")]), button_(append2([class_("move-down-btn"), onClick(new MoveLayerDown(lid)), title("Move layer down")])(styles([new Tuple("width", "16px"), new Tuple("height", "16px"), new Tuple("border", "none"), new Tuple("border-radius", "2px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#ccc"), new Tuple("cursor", "pointer"), new Tuple("font-size", "10px"), new Tuple("padding", "0")])))([text("v")]), button_(append2([class_("delete-layer-btn"), onClick(new DeleteLayer(lid)), title("Delete layer")])(styles([new Tuple("width", "16px"), new Tuple("height", "16px"), new Tuple("border", "none"), new Tuple("border-radius", "2px"), new Tuple("background", "#5a2a2e"), new Tuple("color", "#f88"), new Tuple("cursor", "pointer"), new Tuple("font-size", "10px"), new Tuple("padding", "0")])))([text("x")])]);
           }
           ;
@@ -9645,7 +10958,7 @@ void main() {
     var layers = sortedLayers(stack);
     var layerCount3 = length(layers);
     var activeId = activeLayerId(state2);
-    return div_(append2([class_("layer-panel"), role("complementary"), ariaLabel("Layer panel")])(styles([new Tuple("width", "180px"), new Tuple("padding", "8px"), new Tuple("background", "#1a1a2e"), new Tuple("border-left", "1px solid #333"), new Tuple("font-size", "11px"), new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "8px")])))([div_(styles([new Tuple("display", "flex"), new Tuple("justify-content", "space-between"), new Tuple("align-items", "center")]))([span_(styles([new Tuple("color", "#888"), new Tuple("font-weight", "bold")]))([text("Layers")]), button_(append2([class_("add-layer-btn"), onClick(AddLayer.value), title("Add new layer"), ariaLabel("Add new layer")])(styles([new Tuple("padding", "4px 8px"), new Tuple("border", "none"), new Tuple("border-radius", "3px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#ccc"), new Tuple("cursor", "pointer"), new Tuple("font-size", "12px")])))([text("+")])]), div_(append2([class_("layer-list"), role("list"), ariaLabel("Layer stack with " + (show52(layerCount3) + " layers"))])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "2px"), new Tuple("flex", "1"), new Tuple("overflow-y", "auto")])))(map8(renderLayerItem(activeId)(layerCount3))(layers))]);
+    return div_(append2([class_("layer-panel"), role("complementary"), ariaLabel("Layer panel")])(styles([new Tuple("width", "180px"), new Tuple("padding", "8px"), new Tuple("background", "#1a1a2e"), new Tuple("border-left", "1px solid #333"), new Tuple("font-size", "11px"), new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "8px")])))([div_(styles([new Tuple("display", "flex"), new Tuple("justify-content", "space-between"), new Tuple("align-items", "center")]))([span_(styles([new Tuple("color", "#888"), new Tuple("font-weight", "bold")]))([text("Layers")]), button_(append2([class_("add-layer-btn"), onClick(AddLayer.value), title("Add new layer"), ariaLabel("Add new layer")])(styles([new Tuple("padding", "4px 8px"), new Tuple("border", "none"), new Tuple("border-radius", "3px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#ccc"), new Tuple("cursor", "pointer"), new Tuple("font-size", "12px")])))([text("+")])]), div_(append2([class_("layer-list"), role("list"), ariaLabel("Layer stack with " + (show22(layerCount3) + " layers"))])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "2px"), new Tuple("flex", "1"), new Tuple("overflow-y", "auto")])))(map8(renderLayerItem(activeId)(layerCount3))(layers))]);
   };
   var renderGPUCanvas = function(_state) {
     return canvas_(append2([id_("paint-canvas"), class_("gpu-canvas")])(styles([new Tuple("position", "absolute"), new Tuple("top", "0"), new Tuple("left", "0"), new Tuple("width", "100%"), new Tuple("height", "100%"), new Tuple("pointer-events", "none")])));
@@ -9667,8 +10980,8 @@ void main() {
         return "ONTO GLASS";
       }
       ;
-      var $140 = gz < -0.3;
-      if ($140) {
+      var $176 = gz < -0.3;
+      if ($176) {
         return "Into glass";
       }
       ;
@@ -9687,10 +11000,37 @@ void main() {
       }
       ;
       return "#0f0";
-    })()), new Tuple("font-family", "monospace"), new Tuple("font-size", "11px"), new Tuple("border-radius", "4px"), new Tuple("pointer-events", "none")])))([div_([])([text("Particles: " + show52(particleCount2))]), div_([])([text("Layers: " + show52(layerCt))]), div_([])([text("Gravity X: " + show22(gx))]), div_([])([text("Gravity Y: " + show22(gy))]), div_([])([text("Gravity Z: " + (show22(gz) + (" [" + (paintPressure + "]"))))]), div_([])([text("Gravity Mag: " + (show22(magnitude) + "g"))]), div_([])([text("Playing: " + show42(isPlaying(state2)))]), div_([])([text("Tool: " + show6(currentTool(state2)))])]);
+    })()), new Tuple("font-family", "monospace"), new Tuple("font-size", "11px"), new Tuple("border-radius", "4px"), new Tuple("pointer-events", "none")])))([div_([])([text("Particles: " + show22(particleCount2))]), div_([])([text("Layers: " + show22(layerCt))]), div_([])([text("Gravity X: " + show32(gx))]), div_([])([text("Gravity Y: " + show32(gy))]), div_([])([text("Gravity Z: " + (show32(gz) + (" [" + (paintPressure + "]"))))]), div_([])([text("Gravity Mag: " + (show32(magnitude) + "g"))]), div_([])([text("Playing: " + show52(isPlaying(state2)))]), div_([])([text("Tool: " + show6(currentTool(state2)))])]);
   };
   var renderConfettiOverlay = function(state2) {
     return renderConfetti(easterEggState(state2));
+  };
+  var presetToMedia = function(v) {
+    if (v instanceof Watercolor) {
+      return Watercolor2.value;
+    }
+    ;
+    if (v instanceof OilPaint) {
+      return OilPaint2.value;
+    }
+    ;
+    if (v instanceof Acrylic) {
+      return Acrylic2.value;
+    }
+    ;
+    if (v instanceof Gouache) {
+      return Gouache2.value;
+    }
+    ;
+    if (v instanceof Ink) {
+      return Ink2.value;
+    }
+    ;
+    if (v instanceof Honey) {
+      return Watercolor2.value;
+    }
+    ;
+    throw new Error("Failed pattern match at Canvas.View (line 700, column 1 - line 700, column 51): " + [v.constructor.name]);
   };
   var percentValue = function(current) {
     return function(minVal) {
@@ -9699,8 +11039,12 @@ void main() {
       };
     };
   };
-  var numberToInt = function(n) {
-    return unsafeNumberToInt(n);
+  var modNumber = function(a) {
+    return function(b) {
+      var d = a / b;
+      var floored = floor2(d);
+      return a - toNumber(floored) * b;
+    };
   };
   var mediaLabel = function(v) {
     if (v instanceof Watercolor2) {
@@ -9727,17 +11071,92 @@ void main() {
       return "W/W";
     }
     ;
-    throw new Error("Failed pattern match at Canvas.View (line 603, column 1 - line 603, column 37): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.View (line 735, column 1 - line 735, column 37): " + [v.constructor.name]);
   };
-  var mediaButton = function(mediaType) {
-    return button_(append2([class_("media-btn"), onClick(new MediaTypeSelected(mediaType)), title(wetMediaTypeDescription(mediaType))])(styles([new Tuple("padding", "4px 8px"), new Tuple("border", "none"), new Tuple("border-radius", "3px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#ccc"), new Tuple("font-size", "11px"), new Tuple("cursor", "pointer")])))([text(mediaLabel(mediaType))]);
+  var mediaButton = function(currentMedia) {
+    return function(mediaType) {
+      var isSelected = eq22(mediaType)(currentMedia);
+      var borderStyle = (function() {
+        if (isSelected) {
+          return "2px solid #8080ff";
+        }
+        ;
+        return "2px solid transparent";
+      })();
+      var bgColor = (function() {
+        if (isSelected) {
+          return "#5a5a8e";
+        }
+        ;
+        return "#3a3a5e";
+      })();
+      return button_(append2([class_("media-btn"), onClick(new MediaTypeSelected(mediaType)), title(wetMediaTypeDescription(mediaType))])(styles([new Tuple("padding", "4px 8px"), new Tuple("border", borderStyle), new Tuple("border-radius", "3px"), new Tuple("background", bgColor), new Tuple("color", (function() {
+        if (isSelected) {
+          return "#fff";
+        }
+        ;
+        return "#ccc";
+      })()), new Tuple("font-size", "11px"), new Tuple("cursor", "pointer")])))([text(mediaLabel(mediaType))]);
+    };
   };
-  var renderMediaSelector = function(_state) {
-    return div_(append2([class_("media-selector")])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "2px")])))([span_(styles([new Tuple("font-size", "10px"), new Tuple("color", "#888")]))([text("Media")]), div_(styles([new Tuple("display", "flex"), new Tuple("gap", "2px"), new Tuple("flex-wrap", "wrap")]))(map8(mediaButton)(allWetMediaTypes))]);
+  var renderMediaSelector = function(state2) {
+    var currentPreset = brushPreset(brushConfig(state2));
+    var currentMedia = presetToMedia(currentPreset);
+    return div_(append2([class_("media-selector")])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "2px")])))([span_(styles([new Tuple("font-size", "10px"), new Tuple("color", "#888")]))([text("Media")]), div_(styles([new Tuple("display", "flex"), new Tuple("gap", "2px"), new Tuple("flex-wrap", "wrap")]))(map8(mediaButton(currentMedia))(allWetMediaTypes))]);
   };
   var formatNumber = function(n) {
-    var s = show22(n);
+    var s = show32(n);
     return truncateDecimals(s)(1);
+  };
+  var colorToValApprox = function(c) {
+    var cmax = max11(c.r)(max11(c.g)(c.b));
+    return floor2(cmax * 100);
+  };
+  var colorToSatApprox = function(c) {
+    var cmin = min11(c.r)(min11(c.g)(c.b));
+    var cmax = max11(c.r)(max11(c.g)(c.b));
+    var delta = cmax - cmin;
+    var s = (function() {
+      var $266 = cmax < 1e-3;
+      if ($266) {
+        return 0;
+      }
+      ;
+      return delta / cmax;
+    })();
+    return floor2(s * 100);
+  };
+  var colorToHueApprox = function(c) {
+    var cmax = max11(c.r)(max11(c.g)(c.b));
+    var cmin = min11(c.r)(min11(c.g)(c.b));
+    var delta = cmax - cmin;
+    var h = (function() {
+      var $267 = delta < 1e-3;
+      if ($267) {
+        return 0;
+      }
+      ;
+      var $268 = cmax === c.r;
+      if ($268) {
+        return 60 * modNumber((c.g - c.b) / delta)(6);
+      }
+      ;
+      var $269 = cmax === c.g;
+      if ($269) {
+        return 60 * ((c.b - c.r) / delta + 2);
+      }
+      ;
+      return 60 * ((c.r - c.g) / delta + 4);
+    })();
+    var hNorm = (function() {
+      var $270 = h < 0;
+      if ($270) {
+        return h + 360;
+      }
+      ;
+      return h;
+    })();
+    return floor2(hNorm);
   };
   var colorPresets = [{
     r: 0,
@@ -9818,13 +11237,13 @@ void main() {
   var clampNumber2 = function(val) {
     return function(minVal) {
       return function(maxVal) {
-        var $208 = val < minVal;
-        if ($208) {
+        var $271 = val < minVal;
+        if ($271) {
           return minVal;
         }
         ;
-        var $209 = val > maxVal;
-        if ($209) {
+        var $272 = val > maxVal;
+        if ($272) {
           return maxVal;
         }
         ;
@@ -9838,24 +11257,73 @@ void main() {
         return function(minVal) {
           return function(maxVal) {
             return function(toMsg) {
-              return div_(append2([class_("slider-control"), role("group"), ariaLabel(description)])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "4px")])))([div_(styles([new Tuple("display", "flex"), new Tuple("justify-content", "space-between")]))([span_(styles([new Tuple("color", "#aaa")]))([text(label)]), span_(styles([new Tuple("color", "#fff")]))([text(formatNumber(currentVal))])]), div_(styles([new Tuple("display", "flex"), new Tuple("gap", "4px"), new Tuple("align-items", "center")]))([button_(append2([class_("slider-btn"), onClick(toMsg(clampNumber2(currentVal - stepForRange(minVal)(maxVal))(minVal)(maxVal))), ariaLabel("Decrease " + label)])(styles([new Tuple("width", "24px"), new Tuple("height", "24px"), new Tuple("border", "none"), new Tuple("border-radius", "4px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer")])))([text("-")]), div_(append2([role("progressbar"), attr("aria-valuenow")(show22(currentVal)), attr("aria-valuemin")(show22(minVal)), attr("aria-valuemax")(show22(maxVal)), ariaLabel(label + (" value: " + formatNumber(currentVal)))])(styles([new Tuple("flex", "1"), new Tuple("height", "8px"), new Tuple("background", "#2a2a4e"), new Tuple("border-radius", "4px"), new Tuple("overflow", "hidden")])))([div_(styles([new Tuple("width", show22(percentValue(currentVal)(minVal)(maxVal)) + "%"), new Tuple("height", "100%"), new Tuple("background", "#6a6aaa")]))([])]), button_(append2([class_("slider-btn"), onClick(toMsg(clampNumber2(currentVal + stepForRange(minVal)(maxVal))(minVal)(maxVal))), ariaLabel("Increase " + label)])(styles([new Tuple("width", "24px"), new Tuple("height", "24px"), new Tuple("border", "none"), new Tuple("border-radius", "4px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer")])))([text("+")])])]);
+              return div_(append2([class_("slider-control"), role("group"), ariaLabel(description)])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "4px")])))([div_(styles([new Tuple("display", "flex"), new Tuple("justify-content", "space-between")]))([span_(styles([new Tuple("color", "#aaa")]))([text(label)]), span_(styles([new Tuple("color", "#fff")]))([text(formatNumber(currentVal))])]), div_(styles([new Tuple("display", "flex"), new Tuple("gap", "4px"), new Tuple("align-items", "center")]))([button_(append2([class_("slider-btn"), onClick(toMsg(clampNumber2(currentVal - stepForRange(minVal)(maxVal))(minVal)(maxVal))), ariaLabel("Decrease " + label)])(styles([new Tuple("width", "24px"), new Tuple("height", "24px"), new Tuple("border", "none"), new Tuple("border-radius", "4px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer")])))([text("-")]), div_(append2([role("progressbar"), attr("aria-valuenow")(show32(currentVal)), attr("aria-valuemin")(show32(minVal)), attr("aria-valuemax")(show32(maxVal)), ariaLabel(label + (" value: " + formatNumber(currentVal)))])(styles([new Tuple("flex", "1"), new Tuple("height", "8px"), new Tuple("background", "#2a2a4e"), new Tuple("border-radius", "4px"), new Tuple("overflow", "hidden")])))([div_(styles([new Tuple("width", show32(percentValue(currentVal)(minVal)(maxVal)) + "%"), new Tuple("height", "100%"), new Tuple("background", "#6a6aaa")]))([])]), button_(append2([class_("slider-btn"), onClick(toMsg(clampNumber2(currentVal + stepForRange(minVal)(maxVal))(minVal)(maxVal))), ariaLabel("Increase " + label)])(styles([new Tuple("width", "24px"), new Tuple("height", "24px"), new Tuple("border", "none"), new Tuple("border-radius", "4px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer")])))([text("+")])])]);
             };
           };
         };
       };
     };
   };
-  var clampInt2 = function(n) {
+  var clampIntVal = function(val) {
     return function(minVal) {
       return function(maxVal) {
-        var i = numberToInt(n);
-        var $210 = i < minVal;
-        if ($210) {
+        var $273 = val < minVal;
+        if ($273) {
           return minVal;
         }
         ;
-        var $211 = i > maxVal;
-        if ($211) {
+        var $274 = val > maxVal;
+        if ($274) {
+          return maxVal;
+        }
+        ;
+        return val;
+      };
+    };
+  };
+  var renderHSVSlider = function(label) {
+    return function(currentVal) {
+      return function(minVal) {
+        return function(maxVal) {
+          return function(toMsg) {
+            var step = (function() {
+              var $275 = maxVal > 100;
+              if ($275) {
+                return 15;
+              }
+              ;
+              return 5;
+            })();
+            return div_(styles([new Tuple("display", "flex"), new Tuple("gap", "3px"), new Tuple("align-items", "center")]))([span_(styles([new Tuple("width", "14px"), new Tuple("color", "#888"), new Tuple("font-size", "10px")]))([text(label)]), button_(append2([onClick(toMsg(clampIntVal(currentVal - step | 0)(minVal)(maxVal)))])(styles([new Tuple("width", "18px"), new Tuple("height", "18px"), new Tuple("border", "none"), new Tuple("border-radius", "3px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer"), new Tuple("font-size", "10px"), new Tuple("padding", "0")])))([text("-")]), span_(styles([new Tuple("width", "28px"), new Tuple("text-align", "center"), new Tuple("color", "#fff"), new Tuple("font-size", "10px")]))([text(show22(currentVal))]), button_(append2([onClick(toMsg(clampIntVal(currentVal + step | 0)(minVal)(maxVal)))])(styles([new Tuple("width", "18px"), new Tuple("height", "18px"), new Tuple("border", "none"), new Tuple("border-radius", "3px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer"), new Tuple("font-size", "10px"), new Tuple("padding", "0")])))([text("+")])]);
+          };
+        };
+      };
+    };
+  };
+  var renderHSVSliders = function(hue2) {
+    return function(sat) {
+      return function(val) {
+        return div_(append2([class_("hsv-sliders")])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "4px")])))([renderHSVSlider("H")(hue2)(0)(360)(function(h) {
+          return new ColorHSVChanged(h, sat, val);
+        }), renderHSVSlider("S")(sat)(0)(100)(function(s) {
+          return new ColorHSVChanged(hue2, s, val);
+        }), renderHSVSlider("V")(val)(0)(100)(function(v) {
+          return new ColorHSVChanged(hue2, sat, v);
+        })]);
+      };
+    };
+  };
+  var clampInt2 = function(n) {
+    return function(minVal) {
+      return function(maxVal) {
+        var i = floor2(n);
+        var $276 = i < minVal;
+        if ($276) {
+          return minVal;
+        }
+        ;
+        var $277 = i > maxVal;
+        if ($277) {
           return maxVal;
         }
         ;
@@ -9874,11 +11342,11 @@ void main() {
         return singleton5(v.value0);
       }
       ;
-      throw new Error("Failed pattern match at Canvas.View (line 1395, column 3 - line 1397, column 30): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.View (line 1710, column 3 - line 1712, column 30): " + [v.constructor.name]);
     };
   };
   var intToHex = function(n) {
-    var high = div13(n)(16);
+    var high = div14(n)(16);
     var low = n - (high * 16 | 0) | 0;
     return charAtIndex(high)("0123456789abcdef") + charAtIndex(low)("0123456789abcdef");
   };
@@ -9889,24 +11357,65 @@ void main() {
     };
     return "#" + (toHexByte(c.r) + (toHexByte(c.g) + toHexByte(c.b)));
   };
-  var renderColorPreset = function(color) {
-    var hexColor = colorToHex2(color);
-    return button_(append2([class_("color-preset"), onClick(new ColorChanged(color)), title(hexColor), role("option"), ariaLabel("Select color " + hexColor)])(styles([new Tuple("width", "100%"), new Tuple("aspect-ratio", "1"), new Tuple("border", "none"), new Tuple("border-radius", "4px"), new Tuple("background", hexColor), new Tuple("cursor", "pointer"), new Tuple("padding", "0")])))([]);
+  var categoryShortName = function(v) {
+    if (v instanceof CategoryEssentials) {
+      return "Ess";
+    }
+    ;
+    if (v instanceof CategoryPencil) {
+      return "Pen";
+    }
+    ;
+    if (v instanceof CategoryInk) {
+      return "Ink";
+    }
+    ;
+    if (v instanceof CategoryWatercolor) {
+      return "WC";
+    }
+    ;
+    if (v instanceof CategoryOil) {
+      return "Oil";
+    }
+    ;
+    if (v instanceof CategoryDigital) {
+      return "Dig";
+    }
+    ;
+    if (v instanceof CategoryExpressive) {
+      return "Exp";
+    }
+    ;
+    throw new Error("Failed pattern match at Canvas.View (line 637, column 1 - line 637, column 45): " + [v.constructor.name]);
   };
-  var renderColorPicker = function(currentColor) {
-    return div_(append2([class_("color-picker"), role("group"), ariaLabel("Color picker")])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "8px")])))([span_(styles([new Tuple("color", "#888")]))([text("Color")]), div_(append2([class_("current-color"), role("img"), ariaLabel("Current color: " + colorToHex2(currentColor))])(styles([new Tuple("width", "100%"), new Tuple("height", "32px"), new Tuple("border-radius", "4px"), new Tuple("border", "2px solid #444"), new Tuple("background", colorToHex2(currentColor))])))([]), div_(append2([class_("color-presets"), role("listbox"), ariaLabel("Color presets")])(styles([new Tuple("display", "grid"), new Tuple("grid-template-columns", "repeat(5, 1fr)"), new Tuple("gap", "4px")])))(map8(renderColorPreset)(colorPresets))]);
+  var renderCategoryTab = function(category) {
+    return button_(append2([class_("category-tab"), onClick(new BrushCategorySelected(category)), title("Show " + (show62(category) + " presets"))])(styles([new Tuple("padding", "3px 6px"), new Tuple("border", "none"), new Tuple("border-radius", "3px"), new Tuple("background", "#2a2a4e"), new Tuple("color", "#aaa"), new Tuple("font-size", "9px"), new Tuple("cursor", "pointer")])))([text(categoryShortName(category))]);
   };
-  var renderPropertiesPanel = function(state2) {
-    var config = brushConfig(state2);
-    return div_(append2([class_("properties-panel"), role("complementary"), ariaLabel("Brush properties panel")])(styles([new Tuple("width", "200px"), new Tuple("padding", "8px"), new Tuple("background", "#1a1a2e"), new Tuple("border-right", "1px solid #333"), new Tuple("font-size", "11px"), new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "12px")])))([span_(styles([new Tuple("color", "#888"), new Tuple("font-weight", "bold")]))([text("Properties")]), renderSliderControl("Size")("Brush size in pixels")(config.size)(1)(500)(BrushSizeChanged.create), renderSliderControl("Opacity")("Brush opacity percentage")(config.opacity * 100)(0)(100)(function(v) {
-      return new BrushOpacityChanged(v / 100);
-    }), renderColorPicker(config.color), div_(append2([role("group"), ariaLabel("Export options")])(styles([new Tuple("margin-top", "auto")])))([span_(styles([new Tuple("color", "#888"), new Tuple("display", "block"), new Tuple("margin-bottom", "4px")]))([text("Export")]), div_(styles([new Tuple("display", "flex"), new Tuple("gap", "4px")]))([button_(append2([class_("export-btn"), onClick(new ExportCanvas("png")), title("Export as PNG"), ariaLabel("Export canvas as PNG image")])(styles([new Tuple("flex", "1"), new Tuple("padding", "8px"), new Tuple("border", "none"), new Tuple("border-radius", "4px"), new Tuple("background", "#2a4a6e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer")])))([text("PNG")]), button_(append2([class_("export-btn"), onClick(new ExportCanvas("svg")), title("Export as SVG"), ariaLabel("Export canvas as SVG vector image")])(styles([new Tuple("flex", "1"), new Tuple("padding", "8px"), new Tuple("border", "none"), new Tuple("border-radius", "4px"), new Tuple("background", "#2a6a4e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer")])))([text("SVG")])])])]);
-  };
-  var brushPresetButton = function(preset) {
-    return button_(append2([class_("brush-btn"), onClick(new BrushPresetSelected(preset.name)), title(preset.description)])(styles([new Tuple("padding", "4px 8px"), new Tuple("border", "none"), new Tuple("border-radius", "3px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#ccc"), new Tuple("font-size", "11px"), new Tuple("cursor", "pointer")])))([text(shortPresetName(preset.name))]);
-  };
-  var renderBrushSelector = function(_state) {
-    return div_(append2([class_("brush-selector")])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "2px")])))([span_(styles([new Tuple("font-size", "10px"), new Tuple("color", "#888")]))([text("Brush (" + (show52(length(essentialsKit)) + ")"))]), div_(styles([new Tuple("display", "flex"), new Tuple("gap", "2px"), new Tuple("flex-wrap", "wrap")]))(map8(brushPresetButton)(essentialsKit))]);
+  var brushPresetButton = function(selectedName) {
+    return function(preset) {
+      var isSelected = preset.name === selectedName;
+      var borderStyle = (function() {
+        if (isSelected) {
+          return "2px solid #8080ff";
+        }
+        ;
+        return "2px solid transparent";
+      })();
+      var bgColor = (function() {
+        if (isSelected) {
+          return "#5a5a8e";
+        }
+        ;
+        return "#3a3a5e";
+      })();
+      return button_(append2([class_("brush-btn"), onClick(new BrushPresetSelected(preset.name)), title(preset.description)])(styles([new Tuple("padding", "4px 8px"), new Tuple("border", borderStyle), new Tuple("border-radius", "3px"), new Tuple("background", bgColor), new Tuple("color", (function() {
+        if (isSelected) {
+          return "#fff";
+        }
+        ;
+        return "#ccc";
+      })()), new Tuple("font-size", "11px"), new Tuple("cursor", "pointer")])))([text(shortPresetName(preset.name))]);
+    };
   };
   var atan2Deg = function(y) {
     return function(x) {
@@ -9920,7 +11429,7 @@ void main() {
     var gravState = gravityState(state2);
     var gravVector = currentGravity(gravState);
     var magnitude = gravityMagnitude(gravVector);
-    var tooltipText = "Gravity: " + (show22(magnitude) + ("g (" + (show22(gravityX(gravVector)) + (", " + (show22(gravityY(gravVector)) + ")")))));
+    var tooltipText = "Gravity: " + (show32(magnitude) + ("g (" + (show32(gravityX(gravVector)) + (", " + (show32(gravityY(gravVector)) + ")")))));
     var isActive2 = isGravityActive(gravState);
     var grav2d = gravity2D(gravVector);
     var angle = gravityAngleFromVector({
@@ -9939,7 +11448,7 @@ void main() {
       }
       ;
       return "2px solid #666";
-    })()), new Tuple("display", "flex"), new Tuple("align-items", "center"), new Tuple("justify-content", "center"), new Tuple("transform", "rotate(" + (show22(angle) + "deg)")), new Tuple("transition", "transform 0.1s ease-out")])))([div_(styles([new Tuple("width", "0"), new Tuple("height", "0"), new Tuple("border-left", "8px solid transparent"), new Tuple("border-right", "8px solid transparent"), new Tuple("border-top", (function() {
+    })()), new Tuple("display", "flex"), new Tuple("align-items", "center"), new Tuple("justify-content", "center"), new Tuple("transform", "rotate(" + (show32(angle) + "deg)")), new Tuple("transition", "transform 0.1s ease-out")])))([div_(styles([new Tuple("width", "0"), new Tuple("height", "0"), new Tuple("border-left", "8px solid transparent"), new Tuple("border-right", "8px solid transparent"), new Tuple("border-top", (function() {
       if (isActive2) {
         return "16px solid #6496ff";
       }
@@ -9949,8 +11458,15 @@ void main() {
   };
   var renderCanvas = function(state2) {
     var particleCount2 = particleCount(paintSystem(state2));
-    var canvasDescription = "Paint canvas with " + (show52(particleCount2) + " particles. Press Tab to focus, then use Ctrl+Z to undo, Ctrl+Shift+Z to redo.");
+    var canvasDescription = "Paint canvas with " + (show22(particleCount2) + " particles. Press Tab to focus, then use Ctrl+Z to undo, Ctrl+Shift+Z to redo.");
     return div_(append2([class_("canvas-surface"), id_("paint-canvas"), role("img"), ariaLabel(canvasDescription), tabIndex(0), onMouseDown(new CanvasTouched(0, 0)), onMouseMove(new CanvasMoved(0, 0)), onMouseUp(CanvasReleased.value), onTouchStart(new CanvasTouched(0, 0)), onTouchMove(new CanvasMoved(0, 0)), onTouchEnd(CanvasReleased.value)])(styles([new Tuple("flex", "1"), new Tuple("position", "relative"), new Tuple("background", "#f5f5dc"), new Tuple("overflow", "hidden"), new Tuple("cursor", "crosshair"), new Tuple("min-width", "0"), new Tuple("outline", "none")])))([renderPaintLayers(state2), renderGravityIndicator(state2), renderDebugOverlay(state2)]);
+  };
+  var allBrushCategories = /* @__PURE__ */ (function() {
+    return [CategoryEssentials.value, CategoryPencil.value, CategoryInk.value, CategoryWatercolor.value, CategoryOil.value, CategoryDigital.value, CategoryExpressive.value];
+  })();
+  var renderBrushSelector = function(state2) {
+    var selectedPreset = brushPresetName(brushConfig(state2));
+    return div_(append2([class_("brush-selector")])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "4px")])))([div_(append2([class_("brush-categories")])(styles([new Tuple("display", "flex"), new Tuple("gap", "2px"), new Tuple("flex-wrap", "wrap")])))(map8(renderCategoryTab)(allBrushCategories)), div_(append2([class_("brush-presets")])(styles([new Tuple("display", "flex"), new Tuple("gap", "2px"), new Tuple("flex-wrap", "wrap")])))(map8(brushPresetButton(selectedPreset))(essentialsKit))]);
   };
   var actionButton = function(msg) {
     return function(label) {
@@ -9987,15 +11503,15 @@ void main() {
   };
   var renderActionButtons = function(state2) {
     return div_(append2([class_("action-buttons"), role("group"), ariaLabel("Canvas actions")])(styles([new Tuple("display", "flex"), new Tuple("gap", "4px"), new Tuple("margin-left", "auto")])))([actionButton(Undo.value)("Undo")("Undo last action (Ctrl+Z)")(canUndo(state2)), actionButton(Redo.value)("Redo")("Redo undone action (Ctrl+Shift+Z)")(canRedo(state2)), actionButton(ClearCanvas.value)("Clear")("Clear all paint from canvas")(true), actionButton(ToggleGravity.value)("Gravity")("Toggle gravity effect")(true), actionButton(TogglePlaying.value)((function() {
-      var $221 = isPlaying(state2);
-      if ($221) {
+      var $291 = isPlaying(state2);
+      if ($291) {
         return "Pause";
       }
       ;
       return "Play";
     })())((function() {
-      var $222 = isPlaying(state2);
-      if ($222) {
+      var $292 = isPlaying(state2);
+      if ($292) {
         return "Pause physics simulation";
       }
       ;
@@ -10004,6 +11520,48 @@ void main() {
   };
   var renderToolbar = function(state2) {
     return div_(append2([class_("canvas-toolbar"), role("toolbar"), ariaLabel("Canvas tools")])(styles([new Tuple("display", "flex"), new Tuple("gap", "8px"), new Tuple("padding", "8px"), new Tuple("background", "#1a1a2e"), new Tuple("border-bottom", "1px solid #333")])))([renderToolButtons(state2), renderBrushSelector(state2), renderMediaSelector(state2), renderActionButtons(state2)]);
+  };
+  var absNum = function(n) {
+    var $293 = n < 0;
+    if ($293) {
+      return -n;
+    }
+    ;
+    return n;
+  };
+  var colorsMatch = function(c1) {
+    return function(c2) {
+      var rMatch = absNum(c1.r - c2.r) < 0.05;
+      var gMatch = absNum(c1.g - c2.g) < 0.05;
+      var bMatch = absNum(c1.b - c2.b) < 0.05;
+      return rMatch && (gMatch && bMatch);
+    };
+  };
+  var renderColorPresetWithSelection = function(currentColor) {
+    return function(presetColor) {
+      var isSelected = colorsMatch(currentColor)(presetColor);
+      var hexColor = colorToHex2(presetColor);
+      var borderStyle = (function() {
+        if (isSelected) {
+          return "2px solid #fff";
+        }
+        ;
+        return "2px solid transparent";
+      })();
+      return button_(append2([class_("color-preset"), onClick(new ColorChanged(presetColor)), title(hexColor), role("option"), ariaLabel("Select color " + hexColor)])(styles([new Tuple("width", "100%"), new Tuple("aspect-ratio", "1"), new Tuple("border", borderStyle), new Tuple("border-radius", "4px"), new Tuple("background", hexColor), new Tuple("cursor", "pointer"), new Tuple("padding", "0"), new Tuple("box-sizing", "border-box")])))([]);
+    };
+  };
+  var renderColorPicker = function(currentColor) {
+    var valApprox = colorToValApprox(currentColor);
+    var satApprox = colorToSatApprox(currentColor);
+    var hueApprox = colorToHueApprox(currentColor);
+    return div_(append2([class_("color-picker"), role("group"), ariaLabel("Color picker")])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "6px")])))([span_(styles([new Tuple("color", "#888")]))([text("Color")]), div_(append2([class_("current-color"), role("img"), ariaLabel("Current color: " + colorToHex2(currentColor))])(styles([new Tuple("width", "100%"), new Tuple("height", "24px"), new Tuple("border-radius", "4px"), new Tuple("border", "2px solid #444"), new Tuple("background", colorToHex2(currentColor))])))([]), renderHSVSliders(hueApprox)(satApprox)(valApprox), div_(append2([class_("color-presets"), role("listbox"), ariaLabel("Color presets")])(styles([new Tuple("display", "grid"), new Tuple("grid-template-columns", "repeat(5, 1fr)"), new Tuple("gap", "3px")])))(map8(renderColorPresetWithSelection(currentColor))(colorPresets))]);
+  };
+  var renderPropertiesPanel = function(state2) {
+    var config = brushConfig(state2);
+    return div_(append2([class_("properties-panel"), role("complementary"), ariaLabel("Brush properties panel")])(styles([new Tuple("width", "220px"), new Tuple("padding", "8px"), new Tuple("background", "#1a1a2e"), new Tuple("border-right", "1px solid #333"), new Tuple("font-size", "11px"), new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("gap", "10px"), new Tuple("overflow-y", "auto")])))([span_(styles([new Tuple("color", "#888"), new Tuple("font-weight", "bold")]))([text("Brush")]), renderSliderControl("Size")("Brush size in pixels")(config.size)(1)(500)(BrushSizeChanged.create), renderSliderControl("Opacity")("Brush opacity percentage")(config.opacity * 100)(0)(100)(function(v) {
+      return new BrushOpacityChanged(v / 100);
+    }), renderColorPicker(config.color), span_(styles([new Tuple("color", "#888"), new Tuple("font-weight", "bold"), new Tuple("margin-top", "8px")]))([text("Media")]), renderSliderControl("Wetness")("Paint wetness (more = flows more)")(config.wetness)(0)(100)(WetnessChanged.create), renderSliderControl("Viscosity")("Paint thickness (more = resists flow)")(config.viscosity)(0)(100)(ViscosityChanged.create), renderSliderControl("Dilution")("Water/medium ratio")(config.dilution)(0)(100)(DilutionChanged.create), renderSliderControl("Pigment")("Pigment concentration")(config.pigmentLoad)(0)(100)(PigmentLoadChanged.create), div_(append2([role("group"), ariaLabel("Export options")])(styles([new Tuple("margin-top", "auto")])))([span_(styles([new Tuple("color", "#888"), new Tuple("display", "block"), new Tuple("margin-bottom", "4px")]))([text("Export")]), div_(styles([new Tuple("display", "flex"), new Tuple("gap", "4px")]))([button_(append2([class_("export-btn"), onClick(new ExportCanvas("png")), title("Export as PNG"), ariaLabel("Export canvas as PNG image")])(styles([new Tuple("flex", "1"), new Tuple("padding", "8px"), new Tuple("border", "none"), new Tuple("border-radius", "4px"), new Tuple("background", "#2a4a6e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer")])))([text("PNG")]), button_(append2([class_("export-btn"), onClick(new ExportCanvas("svg")), title("Export as SVG"), ariaLabel("Export canvas as SVG vector image")])(styles([new Tuple("flex", "1"), new Tuple("padding", "8px"), new Tuple("border", "none"), new Tuple("border-radius", "4px"), new Tuple("background", "#2a6a4e"), new Tuple("color", "#fff"), new Tuple("cursor", "pointer")])))([text("SVG")])])])]);
   };
   var view = function(state2) {
     return div_(append2([class_("canvas-app"), role("application"), ariaLabel("Canvas Paint Application")])(styles([new Tuple("display", "flex"), new Tuple("flex-direction", "column"), new Tuple("width", "100vw"), new Tuple("height", "100vh"), new Tuple("overflow", "hidden"), new Tuple("touch-action", "none"), new Tuple("user-select", "none")])))([renderToolbar(state2), div_(append2([class_("canvas-main"), role("main"), ariaLabel("Main canvas workspace")])(styles([new Tuple("flex", "1"), new Tuple("display", "flex"), new Tuple("position", "relative"), new Tuple("overflow", "hidden")])))([renderPropertiesPanel(state2), renderCanvas(state2), renderLayerPanel(state2)]), renderStatusBar(state2), renderConfettiOverlay(state2)]);
@@ -10173,7 +11731,7 @@ void main() {
       return Watercolor.value;
     }
     ;
-    throw new Error("Failed pattern match at Canvas.App (line 558, column 32 - line 564, column 36): " + [mediaType.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.App (line 583, column 32 - line 589, column 36): " + [mediaType.constructor.name]);
   };
   var presetFromName = function(name2) {
     if (name2 === "watercolor") {
@@ -10256,6 +11814,10 @@ void main() {
         return noCmd(setBrushPreset(preset)(state2));
       }
       ;
+      if (msg instanceof BrushCategorySelected) {
+        return noCmd(state2);
+      }
+      ;
       if (msg instanceof MediaTypeSelected) {
         var preset = presetFromWetMedia(msg.value0);
         return noCmd(setBrushPreset(preset)(state2));
@@ -10263,6 +11825,11 @@ void main() {
       ;
       if (msg instanceof ColorChanged) {
         return noCmd(setBrushColor(msg.value0)(state2));
+      }
+      ;
+      if (msg instanceof ColorHSVChanged) {
+        var hsvaColor = hsva(msg.value0)(msg.value1)(msg.value2)(100);
+        return noCmd(setBrushColorHSV(hsvaColor)(state2));
       }
       ;
       if (msg instanceof BrushSizeChanged) {
@@ -10273,6 +11840,22 @@ void main() {
         return noCmd(setBrushOpacity(msg.value0)(state2));
       }
       ;
+      if (msg instanceof WetnessChanged) {
+        return noCmd(setBrushWetness(msg.value0)(state2));
+      }
+      ;
+      if (msg instanceof ViscosityChanged) {
+        return noCmd(setBrushViscosity(msg.value0)(state2));
+      }
+      ;
+      if (msg instanceof DilutionChanged) {
+        return noCmd(setBrushDilution(msg.value0)(state2));
+      }
+      ;
+      if (msg instanceof PigmentLoadChanged) {
+        return noCmd(setBrushPigmentLoad(msg.value0)(state2));
+      }
+      ;
       if (msg instanceof PointerDown) {
         var withPointer = setPointerDown(msg.value0.x)(msg.value0.y)(state2);
         var withParticle = addPaintParticleWithDynamics(msg.value0.x)(msg.value0.y)(msg.value0.pressure)(msg.value0.tiltX)(msg.value0.tiltY)(withPointer);
@@ -10281,8 +11864,8 @@ void main() {
       }
       ;
       if (msg instanceof PointerMoved) {
-        var $30 = isPaintingActive(state2);
-        if ($30) {
+        var $38 = isPaintingActive(state2);
+        if ($38) {
           var withDrag = applyBrushDragFromPointer(msg.value0.x)(msg.value0.y)(msg.value0.pressure)(state2);
           var withParticle = addPaintParticleWithDynamics(msg.value0.x)(msg.value0.y)(msg.value0.pressure)(msg.value0.tiltX)(msg.value0.tiltY)(withDrag);
           return noCmd(withParticle);
@@ -10303,8 +11886,8 @@ void main() {
       }
       ;
       if (msg instanceof CanvasMoved) {
-        var $34 = isPaintingActive(state2);
-        if ($34) {
+        var $42 = isPaintingActive(state2);
+        if ($42) {
           var withDrag = applyBrushDragFromPointer(msg.value0)(msg.value1)(0.5)(state2);
           var withParticle = addPaintParticle(msg.value0)(msg.value1)(withDrag);
           return noCmd(withParticle);
@@ -10390,8 +11973,8 @@ void main() {
       if (msg instanceof KeyDown) {
         var withKey = processEasterEggKey(msg.value0)(state2);
         var eeState = easterEggState(withKey);
-        var $44 = konamiTriggered(eeState);
-        if ($44) {
+        var $52 = konamiTriggered(eeState);
+        if ($52) {
           var withConfetti = triggerEasterEggConfetti(960)(540)(withKey);
           var withReset = resetEasterEggs(withConfetti);
           return noCmd(withReset);
@@ -10401,38 +11984,38 @@ void main() {
       }
       ;
       if (msg instanceof KeyboardShortcut) {
-        var $46 = msg.value0.ctrlKey && (!msg.value0.shiftKey && msg.value0.key === "z");
-        if ($46) {
+        var $54 = msg.value0.ctrlKey && (!msg.value0.shiftKey && msg.value0.key === "z");
+        if ($54) {
           return noCmd(undo(state2));
         }
         ;
-        var $47 = msg.value0.ctrlKey && (msg.value0.shiftKey && (msg.value0.key === "z" || msg.value0.key === "Z"));
-        if ($47) {
+        var $55 = msg.value0.ctrlKey && (msg.value0.shiftKey && (msg.value0.key === "z" || msg.value0.key === "Z"));
+        if ($55) {
           return noCmd(redo(state2));
         }
         ;
-        var $48 = msg.value0.ctrlKey && (!msg.value0.shiftKey && msg.value0.key === "y");
-        if ($48) {
+        var $56 = msg.value0.ctrlKey && (!msg.value0.shiftKey && msg.value0.key === "y");
+        if ($56) {
           return noCmd(redo(state2));
         }
         ;
-        var $49 = msg.value0.ctrlKey && (msg.value0.key === "s" || msg.value0.key === "S");
-        if ($49) {
+        var $57 = msg.value0.ctrlKey && (msg.value0.key === "s" || msg.value0.key === "S");
+        if ($57) {
           return transition(state2)(new Log("EXPORT:png"));
         }
         ;
-        var $50 = msg.value0.ctrlKey && (msg.value0.shiftKey && (msg.value0.key === "e" || msg.value0.key === "E"));
-        if ($50) {
+        var $58 = msg.value0.ctrlKey && (msg.value0.shiftKey && (msg.value0.key === "e" || msg.value0.key === "E"));
+        if ($58) {
           return transition(state2)(new Log("EXPORT:svg"));
         }
         ;
-        var $51 = msg.value0.key === "Escape";
-        if ($51) {
+        var $59 = msg.value0.key === "Escape";
+        if ($59) {
           return noCmd(resetViewport(state2));
         }
         ;
-        var $52 = msg.value0.key === " ";
-        if ($52) {
+        var $60 = msg.value0.key === " ";
+        if ($60) {
           return noCmd(state2);
         }
         ;
@@ -10442,8 +12025,8 @@ void main() {
       if (msg instanceof DeviceMotion) {
         var withMotion = processEasterEggMotion(msg.value0)(state2);
         var eeState = easterEggState(withMotion);
-        var $54 = shakeTriggered(eeState);
-        if ($54) {
+        var $62 = shakeTriggered(eeState);
+        if ($62) {
           var cleared = clearActiveLayer(withMotion);
           var withHistory = pushHistory("Shake clear")(cleared);
           var withReset = resetEasterEggs(withHistory);
@@ -10493,7 +12076,7 @@ void main() {
         return transition(state2)(new Log("EXPORT:" + msg.value0));
       }
       ;
-      throw new Error("Failed pattern match at Canvas.App (line 210, column 26 - line 526, column 49): " + [msg.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.App (line 211, column 26 - line 551, column 49): " + [msg.constructor.name]);
     };
   };
   var initCanvas = /* @__PURE__ */ (function() {
@@ -10522,10 +12105,10 @@ void main() {
         });
       }
       ;
-      throw new Error("Failed pattern match at Canvas.App (line 761, column 16 - line 766, column 10): " + [v1.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.App (line 786, column 16 - line 791, column 10): " + [v1.constructor.name]);
     }
     ;
-    throw new Error("Failed pattern match at Canvas.App (line 759, column 3 - line 766, column 10): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.App (line 784, column 3 - line 791, column 10): " + [v.constructor.name]);
   };
   var handleTouchStart = function(event) {
     var v = touchCount(event);
@@ -10542,7 +12125,7 @@ void main() {
       return CanvasReleased.value;
     }
     ;
-    throw new Error("Failed pattern match at Canvas.App (line 731, column 10 - line 733, column 42): " + [v1.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.App (line 756, column 10 - line 758, column 42): " + [v1.constructor.name]);
   };
   var handleTouchMove = function(event) {
     var v = touchCount(event);
@@ -10559,11 +12142,11 @@ void main() {
       return CanvasReleased.value;
     }
     ;
-    throw new Error("Failed pattern match at Canvas.App (line 740, column 10 - line 742, column 42): " + [v1.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.App (line 765, column 10 - line 767, column 42): " + [v1.constructor.name]);
   };
   var handleTouchEnd = function(event) {
-    var $75 = touchCount(event) < 2;
-    if ($75) {
+    var $83 = touchCount(event) < 2;
+    if ($83) {
       return TwoFingerEnd.value;
     }
     ;
@@ -10613,8 +12196,8 @@ void main() {
     var touchSubs = [new OnTouchStart2(handleTouchStart), new OnTouchMove2(handleTouchMove), new OnTouchEnd2(handleTouchEnd)];
     var pointerSubs = [new OnPointerDown(handlePointerDown), new OnPointerMove(handlePointerMove), new OnPointerUp(handlePointerUp)];
     var orientationSub = (function() {
-      var $76 = gravityEnabled(gravityState(state2));
-      if ($76) {
+      var $84 = gravityEnabled(gravityState(state2));
+      if ($84) {
         return [new OnDeviceOrientation(handleDeviceOrientation)];
       }
       ;
@@ -10624,8 +12207,8 @@ void main() {
     var motionSub = [new OnDeviceMotion(handleDeviceMotion)];
     var keyboardSub = [new OnKeyDown2(handleKeyDown)];
     var animationSub = (function() {
-      var $77 = isPlaying(state2);
-      if ($77) {
+      var $85 = isPlaying(state2);
+      if ($85) {
         return [new OnAnimationFrame(handleAnimationFrame)];
       }
       ;

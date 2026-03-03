@@ -124,6 +124,7 @@ import Canvas.Runtime.DOM as DOM
 import Canvas.Paint.Particle as Paint
 import Canvas.Paint.Particle (PaintPreset(Watercolor, OilPaint, Acrylic, Gouache, Ink, Honey))
 import Hydrogen.Schema.Brush.WetMedia (WetMediaType(Watercolor, OilPaint, Acrylic, Gouache, Ink, WetIntoWet)) as WetMedia
+import Hydrogen.Schema.Color.HSV (hsva) as HSV
 
 -- Easter eggs
 import Canvas.Easter as Easter
@@ -220,6 +221,12 @@ updateCanvas msg state = case msg of
     in
       noCmd (State.setBrushPreset preset state)
   
+  -- Brush category selection (for preset picker UI)
+  View.BrushCategorySelected _category ->
+    -- Category selection just changes which presets are shown in UI
+    -- No state change needed here, handled by view
+    noCmd state
+  
   -- Media type selection (watercolor, oil, etc from Hydrogen WetMedia)
   View.MediaTypeSelected mediaType ->
     let
@@ -227,9 +234,14 @@ updateCanvas msg state = case msg of
     in
       noCmd (State.setBrushPreset preset state)
   
-  -- Color change
+  -- Color change (RGB)
   View.ColorChanged color ->
     noCmd (State.setBrushColor color state)
+  
+  -- Color change (HSV from color picker)
+  View.ColorHSVChanged h s v ->
+    let hsvaColor = HSV.hsva h s v 100
+    in noCmd (State.setBrushColorHSV hsvaColor state)
   
   -- Brush size change
   View.BrushSizeChanged size ->
@@ -238,6 +250,19 @@ updateCanvas msg state = case msg of
   -- Brush opacity change
   View.BrushOpacityChanged opacity ->
     noCmd (State.setBrushOpacity opacity state)
+  
+  -- Media settings changes
+  View.WetnessChanged wetness ->
+    noCmd (State.setBrushWetness wetness state)
+  
+  View.ViscosityChanged viscosity ->
+    noCmd (State.setBrushViscosity viscosity state)
+  
+  View.DilutionChanged dilution ->
+    noCmd (State.setBrushDilution dilution state)
+  
+  View.PigmentLoadChanged pigmentLoad ->
+    noCmd (State.setBrushPigmentLoad pigmentLoad state)
   
   -- Pointer down with full stylus data (pressure, tilt)
   View.PointerDown input ->

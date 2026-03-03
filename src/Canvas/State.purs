@@ -62,14 +62,30 @@ module Canvas.State
   , brushSize
   , brushOpacity
   , brushColor
+  , brushColorHSV
   , brushPreset
+  , brushPresetName
+  , brushWetness
+  , brushViscosity
+  , brushDilution
+  , brushPigmentLoad
+  
+  -- * Color Conversion
+  , colorToHSVA
+  , hsvaToColor
   
   -- * State Updates (pure)
   , setTool
   , setBrushSize
   , setBrushOpacity
   , setBrushColor
+  , setBrushColorHSV
   , setBrushPreset
+  , setBrushPresetName
+  , setBrushWetness
+  , setBrushViscosity
+  , setBrushDilution
+  , setBrushPigmentLoad
   , setActiveLayer
   , togglePlaying
   
@@ -155,6 +171,7 @@ import Prelude
   )
 
 import Data.Array (length, snoc, unsnoc) as Array
+import Data.Int (round, toNumber) as Int
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Map (Map)
 import Data.Map (empty, insert, lookup, delete) as Map
@@ -217,7 +234,16 @@ import Canvas.Paint.Particle
   , mkBrushDrag
   , particleCount
   , presetName
+  , presetProperties
   ) as Paint
+
+-- Hydrogen color (HSV for color picker)
+import Hydrogen.Schema.Color.HSV as HSV
+import Hydrogen.Schema.Color.HSV (HSVA, hsva, hsvaToRecord, fromRGBA, toRGBA)
+import Hydrogen.Schema.Color.RGB (RGBA, rgba, rgbaToRecord)
+
+-- Hydrogen WetMedia atoms
+import Hydrogen.Schema.Brush.WetMedia.Atoms (unwrapWetness, unwrapViscosity)
 
 import Canvas.Physics.Gravity
   ( GravityState
@@ -320,29 +346,86 @@ initialGestureTracking =
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Brush configuration for painting.
+-- |
+-- | Extended to include:
+-- | - Selected brush preset name (from Hydrogen.Schema.Brush.Preset.Library)
+-- | - Media settings (wetness, viscosity, etc.)
+-- | - HSV color for the color picker (using Hydrogen's HSVA)
 type BrushConfig =
   { size :: Number           -- ^ Brush diameter in pixels (1-500)
   , opacity :: Number        -- ^ Brush opacity (0-1)
-  , color :: Color           -- ^ Current paint color
+  , color :: Color           -- ^ Current paint color (RGB)
+  , colorHSV :: HSVA         -- ^ Current paint color (HSV for picker)
   , preset :: Paint.PaintPreset  -- ^ Paint type (watercolor, oil, etc.)
+  , presetName :: String     -- ^ Name of selected brush preset from library
   , spacing :: Number        -- ^ Spacing between dabs (0.1-2.0)
   , hardness :: Number       -- ^ Edge hardness (0-1)
+  -- Media settings (override preset defaults)
+  , wetness :: Number        -- ^ Paint wetness (0-100)
+  , viscosity :: Number      -- ^ Paint viscosity (0-100)
+  , dilution :: Number       -- ^ Water/medium dilution (0-100)
+  , pigmentLoad :: Number    -- ^ Pigment concentration (0-100)
   }
 
 -- | Create brush config with validation.
 mkBrushConfig :: Number -> Number -> Color -> Paint.PaintPreset -> BrushConfig
 mkBrushConfig sz op col pre =
-  { size: max 1.0 (min 500.0 sz)
-  , opacity: max 0.0 (min 1.0 op)
-  , color: col
-  , preset: pre
-  , spacing: 0.25             -- Default: 25% spacing
-  , hardness: 0.8             -- Default: fairly hard edge
-  }
+  let 
+    props = Paint.presetProperties pre
+    -- Convert Color (0-1 floats) to RGBA (0-255 ints) then to HSVA
+    r255 = colorToInt255 col.r
+    g255 = colorToInt255 col.g
+    b255 = colorToInt255 col.b
+    a255 = colorToInt255 col.a
+    rgbaColor = rgba r255 g255 b255 a255
+    hsvaColor = fromRGBA rgbaColor
+  in { size: max 1.0 (min 500.0 sz)
+     , opacity: max 0.0 (min 1.0 op)
+     , color: col
+     , colorHSV: hsvaColor
+     , preset: pre
+     , presetName: "Hard Round"  -- Default preset name
+     , spacing: 0.25             -- Default: 25% spacing
+     , hardness: 0.8             -- Default: fairly hard edge
+     -- Initialize media settings from preset properties
+     , wetness: unwrapWetness props.wetness
+     , viscosity: unwrapViscosity props.viscosity
+     , dilution: 50.0            -- Default medium dilution
+     , pigmentLoad: 75.0         -- Default high pigment
+     }
+
+-- | Convert 0-1 color component to 0-255 int.
+colorToInt255 :: Number -> Int
+colorToInt255 n = 
+  let clamped = max 0.0 (min 1.0 n)
+  in Int.round (clamped * 255.0)
 
 -- | Default brush (20px black watercolor).
 defaultBrushConfig :: BrushConfig
 defaultBrushConfig = mkBrushConfig 20.0 1.0 colorBlack Paint.Watercolor
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                           // color conversion
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Convert Canvas Color to Hydrogen HSVA.
+colorToHSVA :: Color -> HSVA
+colorToHSVA c =
+  let 
+    rgbaColor = rgba (colorToInt255 c.r) (colorToInt255 c.g) (colorToInt255 c.b) (colorToInt255 c.a)
+  in fromRGBA rgbaColor
+
+-- | Convert Hydrogen HSVA to Canvas Color.
+hsvaToColor :: HSVA -> Color
+hsvaToColor hsvaColor =
+  let
+    rgbaColor = toRGBA hsvaColor
+    rec = rgbaToRecord rgbaColor
+  in mkColor (int255ToColor rec.r) (int255ToColor rec.g) (int255ToColor rec.b) (int255ToColor rec.a)
+
+-- | Convert 0-255 int to 0-1 color component.
+int255ToColor :: Int -> Number
+int255ToColor n = Int.toNumber n / 255.0
 
 -- | Get brush size.
 brushSize :: BrushConfig -> Number
@@ -352,13 +435,37 @@ brushSize b = b.size
 brushOpacity :: BrushConfig -> Number
 brushOpacity b = b.opacity
 
--- | Get brush color.
+-- | Get brush color (RGB).
 brushColor :: BrushConfig -> Color
 brushColor b = b.color
 
--- | Get brush preset.
+-- | Get brush color (HSV).
+brushColorHSV :: BrushConfig -> HSVA
+brushColorHSV b = b.colorHSV
+
+-- | Get brush preset (paint type).
 brushPreset :: BrushConfig -> Paint.PaintPreset
 brushPreset b = b.preset
+
+-- | Get brush preset name (from library).
+brushPresetName :: BrushConfig -> String
+brushPresetName b = b.presetName
+
+-- | Get brush wetness (0-100).
+brushWetness :: BrushConfig -> Number
+brushWetness b = b.wetness
+
+-- | Get brush viscosity (0-100).
+brushViscosity :: BrushConfig -> Number
+brushViscosity b = b.viscosity
+
+-- | Get brush dilution (0-100).
+brushDilution :: BrushConfig -> Number
+brushDilution b = b.dilution
+
+-- | Get brush pigment load (0-100).
+brushPigmentLoad :: BrushConfig -> Number
+brushPigmentLoad b = b.pigmentLoad
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                              // history entry
@@ -536,16 +643,51 @@ setBrushOpacity :: forall msg. Number -> AppState msg -> AppState msg
 setBrushOpacity op s = 
   s { brush = s.brush { opacity = max 0.0 (min 1.0 op) } }
 
--- | Set brush color.
+-- | Set brush color (RGB). Also updates HSV.
 setBrushColor :: forall msg. Color -> AppState msg -> AppState msg
-setBrushColor c s = s { brush = s.brush { color = c } }
+setBrushColor c s = 
+  s { brush = s.brush { color = c, colorHSV = colorToHSVA c } }
 
--- | Set brush preset (paint type).
+-- | Set brush color (HSV). Also updates RGB.
+setBrushColorHSV :: forall msg. HSVA -> AppState msg -> AppState msg
+setBrushColorHSV hsv s = 
+  s { brush = s.brush { colorHSV = hsv, color = hsvaToColor hsv } }
+
+-- | Set brush preset (paint type). Updates media settings from preset.
 setBrushPreset :: forall msg. Paint.PaintPreset -> AppState msg -> AppState msg
 setBrushPreset p s = 
-  s { brush = s.brush { preset = p }
-    , paint = s.paint { preset = p }
-    }
+  let props = Paint.presetProperties p
+  in s { brush = s.brush 
+           { preset = p
+           , wetness = unwrapWetness props.wetness
+           , viscosity = unwrapViscosity props.viscosity
+           }
+       , paint = s.paint { preset = p }
+       }
+
+-- | Set brush preset name (from library).
+setBrushPresetName :: forall msg. String -> AppState msg -> AppState msg
+setBrushPresetName name s = s { brush = s.brush { presetName = name } }
+
+-- | Set brush wetness (0-100).
+setBrushWetness :: forall msg. Number -> AppState msg -> AppState msg
+setBrushWetness w s = 
+  s { brush = s.brush { wetness = max 0.0 (min 100.0 w) } }
+
+-- | Set brush viscosity (0-100).
+setBrushViscosity :: forall msg. Number -> AppState msg -> AppState msg
+setBrushViscosity v s = 
+  s { brush = s.brush { viscosity = max 0.0 (min 100.0 v) } }
+
+-- | Set brush dilution (0-100).
+setBrushDilution :: forall msg. Number -> AppState msg -> AppState msg
+setBrushDilution d s = 
+  s { brush = s.brush { dilution = max 0.0 (min 100.0 d) } }
+
+-- | Set brush pigment load (0-100).
+setBrushPigmentLoad :: forall msg. Number -> AppState msg -> AppState msg
+setBrushPigmentLoad p s = 
+  s { brush = s.brush { pigmentLoad = max 0.0 (min 100.0 p) } }
 
 -- | Set active layer.
 setActiveLayer :: forall msg. LayerId -> AppState msg -> AppState msg

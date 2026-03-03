@@ -48,14 +48,33 @@ module Canvas.View
   -- * Stylus Input Type
   , StylusInput
   
+  -- * Brush Category
+  , BrushCategory
+      ( CategoryEssentials
+      , CategoryPencil
+      , CategoryInk
+      , CategoryWatercolor
+      , CategoryOil
+      , CategoryDigital
+      , CategoryExpressive
+      )
+  , allBrushCategories
+  
   -- * Msg Type
   , Msg
       ( ToolSelected
       , BrushPresetSelected
+      , BrushCategorySelected
       , MediaTypeSelected
       , ColorChanged
+      , ColorHSVChanged
       , BrushSizeChanged
       , BrushOpacityChanged
+      -- Media settings
+      , WetnessChanged
+      , ViscosityChanged
+      , DilutionChanged
+      , PigmentLoadChanged
       , PointerDown
       , PointerMoved
       , PointerUp
@@ -122,6 +141,8 @@ import Prelude
   , (+)
   , (-)
   , map
+  , max
+  , min
   , negate
   , not
   , (==)
@@ -129,6 +150,7 @@ import Prelude
   )
 
 import Data.Array (length) as Array
+import Data.Int (floor, toNumber) as IntConv
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.String.CodeUnits (charAt, singleton) as Str
 import Data.Tuple (Tuple(Tuple))
@@ -240,13 +262,53 @@ type StylusInput =
 -- | Messages that the view can emit.
 -- |
 -- | These are handled by the update function in Main.
+-- | Brush preset category for organized display.
+data BrushCategory
+  = CategoryEssentials      -- ^ Core brushes everyone needs
+  | CategoryPencil          -- ^ Graphite, charcoal, conte
+  | CategoryInk             -- ^ Technical pens, brush pens, dip pens
+  | CategoryWatercolor      -- ^ Washes, wet-on-wet, dry brush
+  | CategoryOil             -- ^ Round, flat, filbert, palette knife
+  | CategoryDigital         -- ^ Hard/soft round, airbrush, glow
+  | CategoryExpressive      -- ^ Mood-based presets (calm, intense, nostalgic)
+
+derive instance eqBrushCategory :: Eq BrushCategory
+
+instance showBrushCategory :: Show BrushCategory where
+  show CategoryEssentials = "Essentials"
+  show CategoryPencil = "Pencil"
+  show CategoryInk = "Ink"
+  show CategoryWatercolor = "Watercolor"
+  show CategoryOil = "Oil"
+  show CategoryDigital = "Digital"
+  show CategoryExpressive = "Expressive"
+
+-- | All brush categories for iteration.
+allBrushCategories :: Array BrushCategory
+allBrushCategories = 
+  [ CategoryEssentials
+  , CategoryPencil
+  , CategoryInk
+  , CategoryWatercolor
+  , CategoryOil
+  , CategoryDigital
+  , CategoryExpressive
+  ]
+
 data Msg
   = ToolSelected Tool
   | BrushPresetSelected String           -- ^ Preset name
+  | BrushCategorySelected BrushCategory  -- ^ Change brush category
   | MediaTypeSelected WetMediaType
   | ColorChanged Color
+  | ColorHSVChanged Int Int Int          -- ^ HSV color (h: 0-360, s: 0-100, v: 0-100)
   | BrushSizeChanged Number              -- ^ Change brush size (1-500)
   | BrushOpacityChanged Number           -- ^ Change brush opacity (0-1)
+  -- Media settings
+  | WetnessChanged Number                -- ^ Change wetness (0-100)
+  | ViscosityChanged Number              -- ^ Change viscosity (0-100)
+  | DilutionChanged Number               -- ^ Change dilution (0-100)
+  | PigmentLoadChanged Number            -- ^ Change pigment load (0-100)
   -- Pointer events with full stylus data
   | PointerDown StylusInput              -- ^ Stylus/touch down with pressure/tilt
   | PointerMoved StylusInput             -- ^ Stylus/touch move with pressure/tilt
@@ -302,10 +364,16 @@ derive instance eqMsg :: Eq Msg
 instance showMsg :: Show Msg where
   show (ToolSelected t) = "ToolSelected(" <> show t <> ")"
   show (BrushPresetSelected p) = "BrushPresetSelected(" <> p <> ")"
+  show (BrushCategorySelected c) = "BrushCategorySelected(" <> show c <> ")"
   show (MediaTypeSelected m) = "MediaTypeSelected(" <> show m <> ")"
   show (ColorChanged _) = "ColorChanged"
+  show (ColorHSVChanged h s v) = "ColorHSVChanged(" <> show h <> "," <> show s <> "," <> show v <> ")"
   show (BrushSizeChanged s) = "BrushSizeChanged(" <> show s <> ")"
   show (BrushOpacityChanged o) = "BrushOpacityChanged(" <> show o <> ")"
+  show (WetnessChanged w) = "WetnessChanged(" <> show w <> ")"
+  show (ViscosityChanged v) = "ViscosityChanged(" <> show v <> ")"
+  show (DilutionChanged d) = "DilutionChanged(" <> show d <> ")"
+  show (PigmentLoadChanged p) = "PigmentLoadChanged(" <> show p <> ")"
   show (PointerDown s) = "PointerDown(" <> show s.x <> "," <> show s.y <> " p=" <> show s.pressure <> " t=" <> s.pointerType <> ")"
   show (PointerMoved s) = "PointerMoved(" <> show s.x <> "," <> show s.y <> " p=" <> show s.pressure <> ")"
   show PointerUp = "PointerUp"
@@ -513,40 +581,87 @@ actionButton msg label description enabled =
 --                                                            // brush selector
 -- ═════════════════════════════════════════════════════════════════════════════
 
--- | Brush preset selector.
+-- | Brush preset selector with categories.
 -- |
--- | Uses essentialsKit from Presets library for a curated set of brushes.
--- | Each button shows the preset name and description on hover.
+-- | Shows category tabs and presets organized by type.
+-- | Highlights the currently selected preset.
 renderBrushSelector :: ViewState -> Element Msg
-renderBrushSelector _state =
-  div_
+renderBrushSelector state =
+  let 
+    selectedPreset = State.brushPresetName (State.brushConfig state)
+    -- Show essentials by default (most used presets)
+    presets = Presets.essentialsKit
+  in div_
     ([ class_ "brush-selector" ] <> styles
         [ Tuple "display" "flex"
         , Tuple "flex-direction" "column"
-        , Tuple "gap" "2px"
+        , Tuple "gap" "4px"
         ])
-    [ span_ (styles [ Tuple "font-size" "10px", Tuple "color" "#888" ]) 
-        [ text ("Brush (" <> show (Array.length Presets.essentialsKit) <> ")") ]
+    [ -- Category tabs
+      div_
+        ([ class_ "brush-categories" ] <> styles
+            [ Tuple "display" "flex"
+            , Tuple "gap" "2px"
+            , Tuple "flex-wrap" "wrap"
+            ])
+        (map renderCategoryTab allBrushCategories)
+    -- Preset buttons
     , div_
-        (styles [ Tuple "display" "flex", Tuple "gap" "2px", Tuple "flex-wrap" "wrap" ])
-        (map brushPresetButton Presets.essentialsKit)
+        ([ class_ "brush-presets" ] <> styles
+            [ Tuple "display" "flex"
+            , Tuple "gap" "2px"
+            , Tuple "flex-wrap" "wrap"
+            ])
+        (map (brushPresetButton selectedPreset) presets)
     ]
+
+-- | Render a category tab button.
+renderCategoryTab :: BrushCategory -> Element Msg
+renderCategoryTab category =
+  button_
+    ([ class_ "category-tab"
+    , onClick (BrushCategorySelected category)
+    , E.title ("Show " <> show category <> " presets")
+    ] <> styles
+        [ Tuple "padding" "3px 6px"
+        , Tuple "border" "none"
+        , Tuple "border-radius" "3px"
+        , Tuple "background" "#2a2a4e"
+        , Tuple "color" "#aaa"
+        , Tuple "font-size" "9px"
+        , Tuple "cursor" "pointer"
+        ])
+    [ text (categoryShortName category) ]
+
+-- | Short name for category tabs.
+categoryShortName :: BrushCategory -> String
+categoryShortName CategoryEssentials = "Ess"
+categoryShortName CategoryPencil = "Pen"
+categoryShortName CategoryInk = "Ink"
+categoryShortName CategoryWatercolor = "WC"
+categoryShortName CategoryOil = "Oil"
+categoryShortName CategoryDigital = "Dig"
+categoryShortName CategoryExpressive = "Exp"
 
 -- | Brush preset button from PresetMeta.
 -- |
--- | Uses preset name for display and description for tooltip.
-brushPresetButton :: PresetMeta -> Element Msg
-brushPresetButton preset =
-  button_
+-- | Highlights if this preset is currently selected.
+brushPresetButton :: String -> PresetMeta -> Element Msg
+brushPresetButton selectedName preset =
+  let 
+    isSelected = preset.name == selectedName
+    bgColor = if isSelected then "#5a5a8e" else "#3a3a5e"
+    borderStyle = if isSelected then "2px solid #8080ff" else "2px solid transparent"
+  in button_
     ([ class_ "brush-btn"
     , onClick (BrushPresetSelected preset.name)
     , E.title preset.description
     ] <> styles
         [ Tuple "padding" "4px 8px"
-        , Tuple "border" "none"
+        , Tuple "border" borderStyle
         , Tuple "border-radius" "3px"
-        , Tuple "background" "#3a3a5e"
-        , Tuple "color" "#ccc"
+        , Tuple "background" bgColor
+        , Tuple "color" (if isSelected then "#fff" else "#ccc")
         , Tuple "font-size" "11px"
         , Tuple "cursor" "pointer"
         ])
@@ -563,9 +678,13 @@ shortPresetName name = name  -- Full name for now, could truncate if needed
 -- | Media type selector (Watercolor, Oil, Acrylic, etc).
 -- |
 -- | Dynamically populated from allWetMediaTypes with full descriptions.
+-- | Highlights the currently selected media type.
 renderMediaSelector :: ViewState -> Element Msg
-renderMediaSelector _state =
-  div_
+renderMediaSelector state =
+  let 
+    currentPreset = State.brushPreset (State.brushConfig state)
+    currentMedia = presetToMedia currentPreset
+  in div_
     ([ class_ "media-selector" ] <> styles
         [ Tuple "display" "flex"
         , Tuple "flex-direction" "column"
@@ -574,24 +693,37 @@ renderMediaSelector _state =
     [ span_ (styles [ Tuple "font-size" "10px", Tuple "color" "#888" ]) [ text "Media" ]
     , div_
         (styles [ Tuple "display" "flex", Tuple "gap" "2px", Tuple "flex-wrap" "wrap" ])
-        (map mediaButton allWetMediaTypes)
+        (map (mediaButton currentMedia) allWetMediaTypes)
     ]
+
+-- | Map PaintPreset to WetMediaType for UI comparison.
+presetToMedia :: Paint.PaintPreset -> WetMediaType
+presetToMedia Paint.Watercolor = Watercolor
+presetToMedia Paint.OilPaint = OilPaint
+presetToMedia Paint.Acrylic = Acrylic
+presetToMedia Paint.Gouache = Gouache
+presetToMedia Paint.Ink = Ink
+presetToMedia Paint.Honey = Watercolor  -- Honey maps to WetIntoWet behavior
 
 -- | Single media type button with tooltip description.
 -- |
--- | Uses wetMediaTypeDescription to show full description on hover.
-mediaButton :: WetMediaType -> Element Msg
-mediaButton mediaType =
-  button_
+-- | Highlights if this media type is currently selected.
+mediaButton :: WetMediaType -> WetMediaType -> Element Msg
+mediaButton currentMedia mediaType =
+  let 
+    isSelected = mediaType == currentMedia
+    bgColor = if isSelected then "#5a5a8e" else "#3a3a5e"
+    borderStyle = if isSelected then "2px solid #8080ff" else "2px solid transparent"
+  in button_
     ([ class_ "media-btn"
     , onClick (MediaTypeSelected mediaType)
     , E.title (wetMediaTypeDescription mediaType)
     ] <> styles
         [ Tuple "padding" "4px 8px"
-        , Tuple "border" "none"
+        , Tuple "border" borderStyle
         , Tuple "border-radius" "3px"
-        , Tuple "background" "#3a3a5e"
-        , Tuple "color" "#ccc"
+        , Tuple "background" bgColor
+        , Tuple "color" (if isSelected then "#fff" else "#ccc")
         , Tuple "font-size" "11px"
         , Tuple "cursor" "pointer"
         ])
@@ -1087,6 +1219,7 @@ renderLayerItem activeId totalLayers layer =
 -- | Displays and allows editing of:
 -- | - Brush size (1-500 pixels)
 -- | - Brush opacity (0-100%)
+-- | - Media settings (wetness, viscosity, dilution, pigment load)
 -- | - Color picker
 -- | - Export button
 -- |
@@ -1100,22 +1233,28 @@ renderPropertiesPanel state =
     sizeValue = config.size
     opacityValue = config.opacity
     currentColor = config.color
+    -- Media settings
+    wetnessValue = config.wetness
+    viscosityValue = config.viscosity
+    dilutionValue = config.dilution
+    pigmentValue = config.pigmentLoad
   in div_
     ([ class_ "properties-panel"
     , role "complementary"
     , ariaLabel "Brush properties panel"
     ] <> styles
-        [ Tuple "width" "200px"
+        [ Tuple "width" "220px"
         , Tuple "padding" "8px"
         , Tuple "background" "#1a1a2e"
         , Tuple "border-right" "1px solid #333"
         , Tuple "font-size" "11px"
         , Tuple "display" "flex"
         , Tuple "flex-direction" "column"
-        , Tuple "gap" "12px"
+        , Tuple "gap" "10px"
+        , Tuple "overflow-y" "auto"
         ])
     [ -- Header
-      span_ (styles [ Tuple "color" "#888", Tuple "font-weight" "bold" ]) [ text "Properties" ]
+      span_ (styles [ Tuple "color" "#888", Tuple "font-weight" "bold" ]) [ text "Brush" ]
     
     -- Brush Size
     , renderSliderControl "Size" "Brush size in pixels" sizeValue 1.0 500.0 BrushSizeChanged
@@ -1126,6 +1265,21 @@ renderPropertiesPanel state =
     
     -- Color Picker
     , renderColorPicker currentColor
+    
+    -- Media Settings Header
+    , span_ (styles [ Tuple "color" "#888", Tuple "font-weight" "bold", Tuple "margin-top" "8px" ]) [ text "Media" ]
+    
+    -- Wetness: How much water/medium is in the paint
+    , renderSliderControl "Wetness" "Paint wetness (more = flows more)" wetnessValue 0.0 100.0 WetnessChanged
+    
+    -- Viscosity: How thick the paint is
+    , renderSliderControl "Viscosity" "Paint thickness (more = resists flow)" viscosityValue 0.0 100.0 ViscosityChanged
+    
+    -- Dilution: How much it's thinned with water/medium
+    , renderSliderControl "Dilution" "Water/medium ratio" dilutionValue 0.0 100.0 DilutionChanged
+    
+    -- Pigment Load: How saturated the color is
+    , renderSliderControl "Pigment" "Pigment concentration" pigmentValue 0.0 100.0 PigmentLoadChanged
     
     -- Export buttons
     , div_
@@ -1293,10 +1447,12 @@ truncateDecimals s _maxDecimals =
 --                                                              // color picker
 -- ═════════════════════════════════════════════════════════════════════════════
 
--- | Color picker showing preset colors and current color.
+-- | Color picker showing preset colors, HSV sliders, and current color.
 -- |
--- | Displays a grid of preset colors for quick selection.
--- | Shows the current selected color with a preview.
+-- | Features:
+-- | - Current color preview
+-- | - HSV sliders for precise control (Hue, Saturation, Value)
+-- | - Grid of preset colors for quick selection
 -- |
 -- | ## Accessibility
 -- | - Group role for color controls
@@ -1304,14 +1460,20 @@ truncateDecimals s _maxDecimals =
 -- | - Each preset has color description
 renderColorPicker :: Color -> Element Msg
 renderColorPicker currentColor =
-  div_
+  let
+    -- Convert current color to approximate HSV for slider values
+    -- (This is visual approximation - actual HSV is in state)
+    hueApprox = colorToHueApprox currentColor
+    satApprox = colorToSatApprox currentColor
+    valApprox = colorToValApprox currentColor
+  in div_
     ([ class_ "color-picker"
     , role "group"
     , ariaLabel "Color picker"
     ] <> styles
         [ Tuple "display" "flex"
         , Tuple "flex-direction" "column"
-        , Tuple "gap" "8px"
+        , Tuple "gap" "6px"
         ])
     [ -- Label
       span_ (styles [ Tuple "color" "#888" ]) [ text "Color" ]
@@ -1323,12 +1485,15 @@ renderColorPicker currentColor =
         , ariaLabel ("Current color: " <> colorToHex currentColor)
         ] <> styles
             [ Tuple "width" "100%"
-            , Tuple "height" "32px"
+            , Tuple "height" "24px"
             , Tuple "border-radius" "4px"
             , Tuple "border" "2px solid #444"
             , Tuple "background" (colorToHex currentColor)
             ])
         []
+    
+    -- HSV Sliders
+    , renderHSVSliders hueApprox satApprox valApprox
     
     -- Color presets grid
     , div_
@@ -1338,10 +1503,119 @@ renderColorPicker currentColor =
         ] <> styles
             [ Tuple "display" "grid"
             , Tuple "grid-template-columns" "repeat(5, 1fr)"
-            , Tuple "gap" "4px"
+            , Tuple "gap" "3px"
             ])
-        (map renderColorPreset colorPresets)
+        (map (renderColorPresetWithSelection currentColor) colorPresets)
     ]
+
+-- | Render HSV sliders for precise color control.
+renderHSVSliders :: Int -> Int -> Int -> Element Msg
+renderHSVSliders hue sat val =
+  div_
+    ([ class_ "hsv-sliders" ] <> styles
+        [ Tuple "display" "flex"
+        , Tuple "flex-direction" "column"
+        , Tuple "gap" "4px"
+        ])
+    [ -- Hue slider (0-360)
+      renderHSVSlider "H" hue 0 360 (\h -> ColorHSVChanged h sat val)
+    -- Saturation slider (0-100)
+    , renderHSVSlider "S" sat 0 100 (\s -> ColorHSVChanged hue s val)
+    -- Value/Brightness slider (0-100)
+    , renderHSVSlider "V" val 0 100 (\v -> ColorHSVChanged hue sat v)
+    ]
+
+-- | Render a single HSV slider with +/- buttons.
+renderHSVSlider :: String -> Int -> Int -> Int -> (Int -> Msg) -> Element Msg
+renderHSVSlider label currentVal minVal maxVal toMsg =
+  let 
+    step = if maxVal > 100 then 15 else 5
+  in div_
+    (styles [ Tuple "display" "flex", Tuple "gap" "3px", Tuple "align-items" "center" ])
+    [ -- Label
+      span_ (styles [ Tuple "width" "14px", Tuple "color" "#888", Tuple "font-size" "10px" ]) 
+        [ text label ]
+    -- Decrease button
+    , button_
+        ([ onClick (toMsg (clampIntVal (currentVal - step) minVal maxVal))
+        ] <> styles
+            [ Tuple "width" "18px"
+            , Tuple "height" "18px"
+            , Tuple "border" "none"
+            , Tuple "border-radius" "3px"
+            , Tuple "background" "#3a3a5e"
+            , Tuple "color" "#fff"
+            , Tuple "cursor" "pointer"
+            , Tuple "font-size" "10px"
+            , Tuple "padding" "0"
+            ])
+        [ text "-" ]
+    -- Value display
+    , span_ (styles [ Tuple "width" "28px", Tuple "text-align" "center", Tuple "color" "#fff", Tuple "font-size" "10px" ]) 
+        [ text (show currentVal) ]
+    -- Increase button
+    , button_
+        ([ onClick (toMsg (clampIntVal (currentVal + step) minVal maxVal))
+        ] <> styles
+            [ Tuple "width" "18px"
+            , Tuple "height" "18px"
+            , Tuple "border" "none"
+            , Tuple "border-radius" "3px"
+            , Tuple "background" "#3a3a5e"
+            , Tuple "color" "#fff"
+            , Tuple "cursor" "pointer"
+            , Tuple "font-size" "10px"
+            , Tuple "padding" "0"
+            ])
+        [ text "+" ]
+    ]
+
+-- | Clamp Int to range.
+clampIntVal :: Int -> Int -> Int -> Int
+clampIntVal val minVal maxVal =
+  if val < minVal then minVal
+  else if val > maxVal then maxVal
+  else val
+
+-- | Approximate hue from RGB (0-360).
+colorToHueApprox :: Color -> Int
+colorToHueApprox c =
+  let
+    r = c.r
+    g = c.g  
+    b = c.b
+    cmax = max r (max g b)
+    cmin = min r (min g b)
+    delta = cmax - cmin
+    h = if delta < 0.001 then 0.0
+        else if cmax == r then 60.0 * modNumber ((g - b) / delta) 6.0
+        else if cmax == g then 60.0 * ((b - r) / delta + 2.0)
+        else 60.0 * ((r - g) / delta + 4.0)
+    hNorm = if h < 0.0 then h + 360.0 else h
+  in IntConv.floor hNorm
+
+-- | Approximate saturation from RGB (0-100).
+colorToSatApprox :: Color -> Int
+colorToSatApprox c =
+  let
+    cmax = max c.r (max c.g c.b)
+    cmin = min c.r (min c.g c.b)
+    delta = cmax - cmin
+    s = if cmax < 0.001 then 0.0 else delta / cmax
+  in IntConv.floor (s * 100.0)
+
+-- | Approximate value from RGB (0-100).
+colorToValApprox :: Color -> Int
+colorToValApprox c =
+  let cmax = max c.r (max c.g c.b)
+  in IntConv.floor (cmax * 100.0)
+
+-- | Number modulo for floats.
+modNumber :: Number -> Number -> Number
+modNumber a b = 
+  let d = a / b
+      floored = IntConv.floor d
+  in a - (IntConv.toNumber floored * b)
 
 -- | Render a single color preset button.
 -- |
@@ -1367,6 +1641,47 @@ renderColorPreset color =
         , Tuple "padding" "0"
         ])
     []
+
+-- | Render a color preset with selection highlighting.
+-- |
+-- | Highlights if this color matches the current color.
+renderColorPresetWithSelection :: Color -> Color -> Element Msg
+renderColorPresetWithSelection currentColor presetColor =
+  let 
+    hexColor = colorToHex presetColor
+    isSelected = colorsMatch currentColor presetColor
+    borderStyle = if isSelected then "2px solid #fff" else "2px solid transparent"
+  in button_
+    ([ class_ "color-preset"
+    , onClick (ColorChanged presetColor)
+    , E.title hexColor
+    , role "option"
+    , ariaLabel ("Select color " <> hexColor)
+    ] <> styles
+        [ Tuple "width" "100%"
+        , Tuple "aspect-ratio" "1"
+        , Tuple "border" borderStyle
+        , Tuple "border-radius" "4px"
+        , Tuple "background" hexColor
+        , Tuple "cursor" "pointer"
+        , Tuple "padding" "0"
+        , Tuple "box-sizing" "border-box"
+        ])
+    []
+
+-- | Check if two colors approximately match.
+colorsMatch :: Color -> Color -> Boolean
+colorsMatch c1 c2 =
+  let 
+    threshold = 0.05
+    rMatch = absNum (c1.r - c2.r) < threshold
+    gMatch = absNum (c1.g - c2.g) < threshold
+    bMatch = absNum (c1.b - c2.b) < threshold
+  in rMatch && gMatch && bMatch
+
+-- | Absolute value for Number.
+absNum :: Number -> Number
+absNum n = if n < 0.0 then negate n else n
 
 -- | Convert Color record to hex string.
 -- |
@@ -1399,16 +1714,10 @@ charAtIndex idx str =
 -- | Clamp and convert Number to Int.
 clampInt :: Number -> Int -> Int -> Int
 clampInt n minVal maxVal =
-  let i = numberToInt n
+  let i = IntConv.floor n
   in if i < minVal then minVal
      else if i > maxVal then maxVal
      else i
-
--- | Convert Number to Int (truncate).
-numberToInt :: Number -> Int
-numberToInt n = unsafeNumberToInt n
-
-foreign import unsafeNumberToInt :: Number -> Int
 
 -- | Preset colors for quick selection.
 -- |

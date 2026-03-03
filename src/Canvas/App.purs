@@ -65,6 +65,8 @@ import Prelude
   , (<)
   , (<>)
   , (==)
+  , (||)
+  , (&&)
   , not
   )
 
@@ -102,6 +104,8 @@ import Hydrogen.Runtime.App
 
 import Hydrogen.Runtime.Cmd
   ( Transition
+  , Cmd(Log)
+  , transition
   , noCmd
   )
 
@@ -231,6 +235,8 @@ updateCanvas msg state = case msg of
   -- Pointer down with full stylus data (pressure, tilt)
   View.PointerDown input ->
     let
+      -- Track pointer down for drag physics
+      withPointer = State.setPointerDown input.x input.y state
       -- Add a paint particle with full dynamics
       withParticle = State.addPaintParticleWithDynamics 
         input.x 
@@ -238,48 +244,70 @@ updateCanvas msg state = case msg of
         input.pressure 
         input.tiltX 
         input.tiltY 
-        state
+        withPointer
       -- Push history for undo
       withHistory = State.pushHistory "Paint stroke" withParticle
     in
       noCmd withHistory
   
   -- Pointer move with full stylus data
+  -- This both adds new paint AND drags existing wet paint (finger painting)
   View.PointerMoved input ->
     if isPaintingActive state
-      then noCmd (State.addPaintParticleWithDynamics 
-        input.x 
-        input.y 
-        input.pressure 
-        input.tiltX 
-        input.tiltY 
-        state)
+      then 
+        let
+          -- First apply drag physics to existing wet paint
+          withDrag = State.applyBrushDragFromPointer 
+            input.x 
+            input.y 
+            input.pressure 
+            state
+          -- Then add new paint particle
+          withParticle = State.addPaintParticleWithDynamics 
+            input.x 
+            input.y 
+            input.pressure 
+            input.tiltX 
+            input.tiltY 
+            withDrag
+        in
+          noCmd withParticle
       else noCmd state
   
   -- Pointer up (stylus/touch lifted)
   View.PointerUp ->
-    noCmd state
+    noCmd (State.setPointerUp state)
   
   -- Legacy: Canvas touch/click start (no pressure/tilt, for fallback)
   View.CanvasTouched x y ->
     let
+      -- Track pointer down for drag physics
+      withPointer = State.setPointerDown x y state
       -- Add a paint particle at touch position with default pressure
-      withParticle = State.addPaintParticle x y state
+      withParticle = State.addPaintParticle x y withPointer
       -- Push history for undo
       withHistory = State.pushHistory "Paint stroke" withParticle
     in
       noCmd withHistory
   
   -- Legacy: Canvas move (paint while dragging, no pressure/tilt)
+  -- Also applies drag physics for finger painting effect
   View.CanvasMoved x y ->
     -- Only add particles if this is a painting tool
     if isPaintingActive state
-      then noCmd (State.addPaintParticle x y state)
+      then 
+        let
+          -- Apply drag physics first (default pressure 0.5)
+          withDrag = State.applyBrushDragFromPointer x y 0.5 state
+          -- Then add new paint
+          withParticle = State.addPaintParticle x y withDrag
+        in
+          noCmd withParticle
       else noCmd state
   
   -- Canvas release
   View.CanvasReleased ->
-    noCmd state
+    noCmd (State.setPointerUp state)
   
   -- Device orientation change (update gravity)
   View.OrientationChanged orientation ->
@@ -396,6 +424,41 @@ updateCanvas msg state = case msg of
         else
           noCmd withKey
   
+  -- Keyboard shortcuts with modifiers (Ctrl+Z, Ctrl+Shift+Z, etc.)
+  View.KeyboardShortcut shortcut ->
+    -- Handle standard keyboard shortcuts
+    if shortcut.ctrlKey && not shortcut.shiftKey && (shortcut.key == "z")
+      then
+        -- Ctrl+Z = Undo
+        noCmd (State.undo state)
+    else if shortcut.ctrlKey && shortcut.shiftKey && (shortcut.key == "z" || shortcut.key == "Z")
+      then
+        -- Ctrl+Shift+Z = Redo
+        noCmd (State.redo state)
+    else if shortcut.ctrlKey && not shortcut.shiftKey && (shortcut.key == "y")
+      then
+        -- Ctrl+Y = Redo (Windows convention)
+        noCmd (State.redo state)
+    else if shortcut.ctrlKey && (shortcut.key == "s" || shortcut.key == "S")
+      then
+        -- Ctrl+S = Export PNG
+        transition state (Log "EXPORT:png")
+    else if shortcut.ctrlKey && shortcut.shiftKey && (shortcut.key == "e" || shortcut.key == "E")
+      then
+        -- Ctrl+Shift+E = Export SVG
+        transition state (Log "EXPORT:svg")
+    else if shortcut.key == "Escape"
+      then
+        -- Escape = Reset viewport
+        noCmd (State.resetViewport state)
+    else if shortcut.key == " "
+      then
+        -- Space = Toggle pan tool (temporarily)
+        noCmd state
+    else
+      -- Pass unhandled shortcuts to easter egg detector
+      noCmd (State.processEasterEggKey shortcut.key state)
+  
   -- Easter egg: Device motion (for shake detection)
   View.DeviceMotion motion ->
     let
@@ -450,12 +513,10 @@ updateCanvas msg state = case msg of
     noCmd (State.endTwoFingerGesture state)
   
   -- Export canvas (PNG or SVG)
-  -- Note: Actual export logic would require FFI to access canvas rendering
-  -- For now, this is a placeholder that logs the export request
-  View.ExportCanvas _format ->
-    -- TODO: Implement actual export via FFI (html2canvas, etc.)
-    -- For now, just return state unchanged
-    noCmd state
+  -- Triggers export via command that will be executed by the runtime.
+  -- The Log command with special prefix "EXPORT:" is interpreted by the runtime.
+  View.ExportCanvas format ->
+    transition state (Log ("EXPORT:" <> format))
 
 -- | Check if painting is currently active (brush tool selected).
 isPaintingActive :: AppState -> Boolean
@@ -731,8 +792,16 @@ main = do
   -- Mount the application to #app
   -- This starts the animation loop and returns immediately
   -- Pass particle extraction function for GPU rendering
+  -- Pass View.Tick constructor for proper message creation (no unsafe coercion)
+  -- Pass KeyboardShortcut constructor for keyboard shortcuts with modifiers
   let getParticlesFromState = \state -> Paint.allParticles (State.paintSystem state)
-  DOM.mount "#app" canvasApp updateCanvas View.view initCanvas getParticlesFromState
+  let toKbShortcutMsg = \ks -> View.KeyboardShortcut
+        { key: ks.key
+        , ctrlKey: ks.ctrlKey
+        , shiftKey: ks.shiftKey
+        , altKey: ks.altKey
+        }
+  DOM.mount "#app" canvasApp updateCanvas View.view initCanvas getParticlesFromState View.Tick toKbShortcutMsg
   
   -- Log completion and return unit
   log "Canvas Builder ready!"

@@ -1,0 +1,24 @@
+{
+  "name": "canvas-builder",
+  "version": "0.1.0",
+  "description": "Physics-based paint application built with PureScript Hydrogen",
+  "private": true,
+  "scripts": {
+    "build": "spago build && esbuild output/Canvas.App/index.js --bundle --outfile=dist/canvas.js --format=iife --global-name=CanvasApp",
+    "build:watch": "spago build --watch",
+    "bundle": "esbuild output/Canvas.App/index.js --bundle --outfile=dist/canvas.js --format=iife --global-name=CanvasApp",
+    "bundle:min": "esbuild output/Canvas.App/index.js --bundle --outfile=dist/canvas.min.js --format=iife --global-name=CanvasApp --minify",
+    "serve": "npx http-server . -p 8080 -c-1 --cors -o",
+    "serve:lan": "npx http-server . -p 8080 -c-1 --cors -a 0.0.0.0",
+    "dev": "npm run build && npm run serve",
+    "dev:lan": "npm run build && npm run serve:lan"
+  },
+  "keywords": [
+    "purescript",
+    "hydrogen",
+    "canvas",
+    "paint",
+    "physics",
+    "webgl"
+  ]
+}

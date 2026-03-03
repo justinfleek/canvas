@@ -20,41 +20,6 @@ export const selectElementImpl = (selector) => () => {
   return el || null;
 };
 
-// Create text node
-export const createTextNode = (text) => () => {
-  return document.createTextNode(text);
-};
-
-// Create element with tag name
-export const createElement = (tagName) => () => {
-  return document.createElement(tagName);
-};
-
-// Create SVG element with tag name
-export const createSvgElement = (tagName) => () => {
-  return document.createElementNS("http://www.w3.org/2000/svg", tagName);
-};
-
-// Set attribute on element
-export const setAttribute = (el) => (name) => (value) => () => {
-  el.setAttribute(name, value);
-};
-
-// Set property on element
-export const setProperty = (el) => (name) => (value) => () => {
-  el[name] = value;
-};
-
-// Append child to parent
-export const appendChild = (parent) => (child) => () => {
-  parent.appendChild(child);
-};
-
-// Clear all children from element
-export const clearChildren = (el) => () => {
-  el.innerHTML = "";
-};
-
 // Set innerHTML (for rendered HTML string)
 export const setInnerHTML = (el) => (html) => () => {
   el.innerHTML = html;
@@ -312,29 +277,73 @@ const extractPointerInput = (e, rect) => ({
   clientY: e.clientY,
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                                // browser boundary // haptics
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Trigger haptic feedback if supported
+const triggerHaptic = (pattern) => {
+  if (navigator.vibrate) {
+    navigator.vibrate(pattern);
+  }
+};
+
+// Haptic patterns for paint interactions (in milliseconds)
+const HAPTIC_PAINT_DAB = [15];
+const HAPTIC_PAINT_STROKE = [5, 10, 5];
+const HAPTIC_PAINT_RELEASE = [10];
+const HAPTIC_CANVAS_TEXTURE = [3, 5, 3];
+
 // Add pointer down listener to element (stylus/touch/mouse down)
+// Triggers haptic feedback for paint dab
 export const addPointerDownListenerImpl = (el) => (callback) => () => {
   const handler = (e) => {
     const rect = el.getBoundingClientRect();
-    callback(extractPointerInput(e, rect))();
+    const input = extractPointerInput(e, rect);
+    
+    // Trigger haptic feedback for paint dab (scaled by pressure)
+    const pressure = input.pressure || 0.5;
+    const duration = Math.round(15 * (0.5 + pressure));
+    triggerHaptic([duration]);
+    
+    callback(input)();
   };
   el.addEventListener("pointerdown", handler);
   return () => el.removeEventListener("pointerdown", handler);
 };
 
+// Track last haptic time to avoid excessive vibrations during move
+let lastHapticTime = 0;
+const HAPTIC_THROTTLE_MS = 50;
+
 // Add pointer move listener to element (stylus/touch/mouse move)
+// Triggers subtle haptic feedback for canvas texture feel
 export const addPointerMoveListenerImpl = (el) => (callback) => () => {
   const handler = (e) => {
     const rect = el.getBoundingClientRect();
-    callback(extractPointerInput(e, rect))();
+    const input = extractPointerInput(e, rect);
+    
+    // Throttled haptic feedback for painting motion (canvas texture feel)
+    const now = performance.now();
+    if (e.buttons > 0 && now - lastHapticTime > HAPTIC_THROTTLE_MS) {
+      // Subtle texture feedback while painting
+      triggerHaptic([3]);
+      lastHapticTime = now;
+    }
+    
+    callback(input)();
   };
   el.addEventListener("pointermove", handler);
   return () => el.removeEventListener("pointermove", handler);
 };
 
 // Add pointer up listener to window (stylus/touch/mouse up)
+// Triggers haptic feedback for stroke completion
 export const addPointerUpListenerImpl = (callback) => () => {
   const handler = (e) => {
+    // Light haptic for stroke end
+    triggerHaptic([10]);
+    
     callback(extractPointerInput(e, null))();
   };
   window.addEventListener("pointerup", handler);
@@ -390,17 +399,8 @@ export const modifyRef = (ref) => (f) => () => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//                                               // browser boundary // unsafe ops
+//                                                    // browser boundary // ui ops
 // ═══════════════════════════════════════════════════════════════════════════════
-
-// UNSAFE: Coerce a number to a Tick message
-// This assumes the app's Msg type has a Tick constructor that takes Number
-// In production, we'd have proper message routing
-export const unsafeCoerceTick = (deltaTime) => {
-  // Return an object that matches the Tick constructor structure
-  // PureScript ADTs are represented as { tag: "ConstructorName", _1: arg1, ... }
-  return { tag: "Tick", _1: deltaTime };
-};
 
 // Set GPU backend status text in the UI
 export const setGPUStatusTextImpl = (text) => () => {
@@ -408,4 +408,216 @@ export const setGPUStatusTextImpl = (text) => () => {
   if (el) {
     el.textContent = text;
   }
+};
+
+// Global unmount function for cleanup/hot reload
+// Call window.__canvasUnmount() to stop the animation loop
+export const setGlobalUnmountImpl = (unmountFn) => () => {
+  window.__canvasUnmount = () => {
+    console.log("Canvas: Unmounting...");
+    unmountFn();
+    console.log("Canvas: Animation loop stopped");
+  };
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                      // browser boundary // keyboard shortcuts
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Keyboard shortcut handler callback (set by PureScript)
+let keyboardShortcutCallback = null;
+
+// Add keyboard shortcut listener with full modifier support
+export const addKeyboardShortcutListenerImpl = (callback) => () => {
+  keyboardShortcutCallback = callback;
+  
+  const handler = (e) => {
+    // Build shortcut object with modifiers
+    const shortcut = {
+      key: e.key,
+      ctrlKey: e.ctrlKey || e.metaKey,  // Handle both Ctrl and Cmd (macOS)
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+    };
+    
+    // Prevent default for common shortcuts we handle
+    if (shortcut.ctrlKey) {
+      const key = e.key.toLowerCase();
+      if (key === "z" || key === "y" || key === "s" || key === "e") {
+        e.preventDefault();
+      }
+    }
+    
+    callback(shortcut)();
+  };
+  
+  document.addEventListener("keydown", handler);
+  
+  return () => {
+    document.removeEventListener("keydown", handler);
+    keyboardShortcutCallback = null;
+  };
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                                // browser boundary // canvas export
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Export canvas as PNG and trigger download
+export const exportCanvasPNGImpl = (canvasId) => () => {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) {
+    console.error("Canvas not found:", canvasId);
+    return;
+  }
+  
+  try {
+    const dataURL = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.download = "canvas-export.png";
+    link.href = dataURL;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    console.log("Canvas exported as PNG");
+  } catch (err) {
+    console.error("Failed to export canvas as PNG:", err);
+  }
+};
+
+// Export canvas as SVG (renders SVG fallback layer)
+export const exportCanvasSVGImpl = (svgId) => () => {
+  const svg = document.getElementById(svgId);
+  if (!svg) {
+    console.error("SVG element not found:", svgId);
+    return;
+  }
+  
+  try {
+    // Clone the SVG and make it visible for export
+    const svgClone = svg.cloneNode(true);
+    svgClone.style.display = "block";
+    
+    // Serialize to string
+    const serializer = new XMLSerializer();
+    const svgString = serializer.serializeToString(svgClone);
+    
+    // Create download
+    const blob = new Blob([svgString], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.download = "canvas-export.svg";
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    console.log("Canvas exported as SVG");
+  } catch (err) {
+    console.error("Failed to export canvas as SVG:", err);
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                          // browser boundary // canvas texture
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Generate procedural linen/cloth canvas texture.
+// This creates a realistic canvas surface that looks like real artist canvas.
+// The texture is generated once and cached as a pattern for efficient rendering.
+
+let canvasTexturePattern = null;
+
+// Generate the linen texture pattern
+const generateLinenTexture = (width, height) => {
+  const offscreen = document.createElement("canvas");
+  offscreen.width = width;
+  offscreen.height = height;
+  const ctx = offscreen.getContext("2d");
+  
+  // Base canvas color (warm off-white like real linen)
+  ctx.fillStyle = "#f5f0e6";
+  ctx.fillRect(0, 0, width, height);
+  
+  // Linen weave pattern - horizontal threads
+  ctx.strokeStyle = "rgba(200, 190, 170, 0.3)";
+  ctx.lineWidth = 1;
+  for (let y = 0; y < height; y += 3) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    // Slight wave for natural look
+    for (let x = 0; x < width; x += 4) {
+      const offset = Math.sin(x * 0.1 + y * 0.05) * 0.5;
+      ctx.lineTo(x, y + offset);
+    }
+    ctx.stroke();
+  }
+  
+  // Vertical threads (cross-weave)
+  ctx.strokeStyle = "rgba(180, 170, 150, 0.25)";
+  for (let x = 0; x < width; x += 3) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    for (let y = 0; y < height; y += 4) {
+      const offset = Math.sin(y * 0.1 + x * 0.05) * 0.5;
+      ctx.lineTo(x + offset, y);
+    }
+    ctx.stroke();
+  }
+  
+  // Add subtle noise for natural texture variation
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    // Small random variation in brightness
+    const noise = (Math.random() - 0.5) * 8;
+    data[i] = Math.min(255, Math.max(0, data[i] + noise));     // R
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise)); // G
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise)); // B
+  }
+  ctx.putImageData(imageData, 0, 0);
+  
+  return offscreen;
+};
+
+// Initialize canvas texture and apply it to the paint canvas
+export const initCanvasTextureImpl = (canvasId) => () => {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) {
+    console.warn("Canvas texture: element not found:", canvasId);
+    return;
+  }
+  
+  console.log("Canvas texture: Generating linen texture...");
+  
+  // Generate a tileable 128x128 texture
+  const textureSize = 128;
+  const textureCanvas = generateLinenTexture(textureSize, textureSize);
+  
+  // Create a pattern from the texture
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    canvasTexturePattern = ctx.createPattern(textureCanvas, "repeat");
+    console.log("Canvas texture: Linen texture initialized");
+  }
+};
+
+// Render the canvas texture background
+export const renderCanvasTextureImpl = (canvasId) => () => {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !canvasTexturePattern) {
+    return;
+  }
+  
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  
+  // Fill with linen texture pattern
+  ctx.fillStyle = canvasTexturePattern;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+};
+
+// Get whether canvas texture is initialized
+export const hasCanvasTextureImpl = () => {
+  return canvasTexturePattern !== null;
 };

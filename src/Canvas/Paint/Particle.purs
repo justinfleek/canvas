@@ -38,6 +38,7 @@ module Canvas.Paint.Particle
     PaintParticle
   , Particle
   , mkPaintParticle
+  , mkPaintParticleWithHeight
   , particlePosition
   , particleVelocity
   , particleColor
@@ -45,6 +46,9 @@ module Canvas.Paint.Particle
   , particleWetness
   , particleViscosity
   , particleRadius
+  , particleHeight
+  , setParticleHeight
+  , addParticleHeight
   
   -- * Paint System (collection of particles)
   , PaintSystem
@@ -79,11 +83,17 @@ module Canvas.Paint.Particle
   , computeForces
   , integrateParticles
   , enforceBounds
+  , applyImpastoStacking
   
   -- * Drying
   , applyDrying
   , commitDriedParticles
   , isDried
+  
+  -- * Drag Physics (finger painting)
+  , BrushDrag
+  , applyBrushDrag
+  , mkBrushDrag
   
   -- * Analysis
   , systemEnergy
@@ -172,6 +182,15 @@ import Canvas.Types
 -- | A single paint particle with physical and visual properties.
 -- |
 -- | Combines SPH physics particle with wet media paint properties.
+-- |
+-- | ## Impasto Physics
+-- |
+-- | The `height` field tracks paint thickness for impasto effects.
+-- | When particles overlap, their heights accumulate - simulating how
+-- | thick paint builds up on a real canvas. Height affects:
+-- | - Z-ordering (taller paint renders on top)
+-- | - Visual appearance (thicker paint = more opaque, cast shadows)
+-- | - Flow resistance (thick paint resists gravity more)
 type PaintParticle =
   { id :: Int                  -- ^ Unique identifier
   , x :: Number                -- ^ X position (canvas coords)
@@ -186,6 +205,7 @@ type PaintParticle =
   , viscosity :: Viscosity     -- ^ Resistance to flow
   , dryingRate :: DryingRate   -- ^ How fast it dries
   , radius :: Number           -- ^ Visual radius (px)
+  , height :: Number           -- ^ Paint thickness/height for impasto (0.0 = flat, 1.0+ = thick)
   , age :: Number              -- ^ Time since creation (s)
   }
 
@@ -212,6 +232,35 @@ mkPaintParticle pid px py pcolor pwet pvisc =
   , viscosity: pvisc
   , dryingRate: mkDryingRate 10.0  -- Default: medium drying
   , radius: 3.0                     -- Default: 3px radius
+  , height: 0.1                     -- Default: thin layer of paint
+  , age: 0.0
+  }
+
+-- | Create a paint particle with explicit height (for impasto).
+mkPaintParticleWithHeight
+  :: Int           -- ^ ID
+  -> Number        -- ^ X position
+  -> Number        -- ^ Y position
+  -> Color         -- ^ Paint color
+  -> Wetness       -- ^ Initial wetness
+  -> Viscosity     -- ^ Paint viscosity
+  -> Number        -- ^ Initial height/thickness
+  -> PaintParticle
+mkPaintParticleWithHeight pid px py pcolor pwet pvisc pheight =
+  { id: pid
+  , x: px
+  , y: py
+  , vx: 0.0
+  , vy: 0.0
+  , mass: 1.0
+  , density: 1000.0
+  , pressure: 0.0
+  , color: pcolor
+  , wetness: pwet
+  , viscosity: pvisc
+  , dryingRate: mkDryingRate 10.0
+  , radius: 3.0
+  , height: pheight
   , age: 0.0
   }
 
@@ -238,6 +287,18 @@ particleViscosity p = p.viscosity
 -- | Get particle radius.
 particleRadius :: PaintParticle -> Number
 particleRadius p = p.radius
+
+-- | Get particle height (thickness for impasto).
+particleHeight :: PaintParticle -> Number
+particleHeight p = p.height
+
+-- | Set particle height (for impasto stacking).
+setParticleHeight :: Number -> PaintParticle -> PaintParticle
+setParticleHeight h p = p { height = h }
+
+-- | Add to particle height (accumulate impasto).
+addParticleHeight :: Number -> PaintParticle -> PaintParticle
+addParticleHeight dh p = p { height = p.height + dh }
 
 -- | Get particle color as hex string (for SVG rendering).
 -- |
@@ -482,10 +543,68 @@ simulateStep sys dt =
     integrated = integrateParticles withForces dt
     -- 5. Enforce boundary conditions
     bounded = enforceBounds integrated
-    -- 6. Apply drying
-    dried = applyDrying bounded dt
+    -- 6. Apply impasto stacking (overlapping particles accumulate height)
+    stacked = applyImpastoStacking bounded
+    -- 7. Apply drying
+    dried = applyDrying stacked dt
   in
     dried
+
+-- | Apply impasto stacking — overlapping particles accumulate height.
+-- |
+-- | When paint particles occupy the same space, they stack on top of each
+-- | other like real thick paint. This creates the impasto effect where
+-- | adding more paint builds up visible thickness.
+-- |
+-- | ## Algorithm
+-- |
+-- | For each particle, find nearby particles (within smoothing radius).
+-- | If overlapping significantly (distance < radius), increase height
+-- | proportional to the overlap and the neighbor's paint amount.
+-- |
+-- | Height is modulated by:
+-- | - Viscosity (thick paint stacks more)
+-- | - Wetness (wet paint merges/flows, dry paint stacks)
+applyImpastoStacking :: PaintSystem -> PaintSystem
+applyImpastoStacking sys =
+  let
+    h = sys.smoothingRadius
+    
+    -- Calculate height contribution from neighbors
+    computeStackingHeight :: PaintParticle -> Number
+    computeStackingHeight p =
+      Array.foldl (\acc neighbor ->
+        if neighbor.id == p.id then acc
+        else
+          let
+            dx = p.x - neighbor.x
+            dy = p.y - neighbor.y
+            dist = Num.sqrt (dx * dx + dy * dy)
+            -- Overlap factor: 1.0 when exactly on top, 0.0 when at smoothing radius
+            overlapFactor = max 0.0 (1.0 - dist / h)
+            -- Viscosity modulation: thick paint (high viscosity) stacks more
+            viscMod = unwrapViscosity neighbor.viscosity / 100.0
+            -- Wet paint contribution (wet paint can stack before it flows away)
+            wetMod = unwrapWetness neighbor.wetness / 100.0
+            -- Height contribution from this neighbor
+            -- Higher viscosity = more stacking, wet paint can still stack temporarily
+            contribution = overlapFactor * overlapFactor * viscMod * wetMod * neighbor.height * 0.1
+          in
+            acc + contribution
+      ) 0.0 sys.particles
+    
+    -- Update particle heights with stacking
+    updateHeight p =
+      let 
+        stackAdd = computeStackingHeight p
+        -- Height increases from stacking, but slowly settles if no overlap
+        newHeight = p.height + stackAdd
+        -- Cap maximum height to prevent runaway
+        cappedHeight = min 5.0 newHeight
+      in
+        p { height = cappedHeight }
+  in
+    sys { particles = map updateHeight sys.particles }
 
 -- | Apply gravity to all particles.
 applyGravity :: PaintSystem -> Number -> Number -> PaintSystem
@@ -666,6 +785,102 @@ commitDriedParticles sys =
 -- | Check if a particle is fully dried.
 isDried :: PaintParticle -> Boolean
 isDried p = unwrapWetness p.wetness < 1.0
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                              // drag physics
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Brush drag input — represents finger/stylus motion.
+-- |
+-- | Used to apply drag forces to nearby paint particles,
+-- | pulling wet paint along with the brush stroke.
+type BrushDrag =
+  { x :: Number        -- ^ Current brush X position
+  , y :: Number        -- ^ Current brush Y position
+  , vx :: Number       -- ^ Brush velocity X (dx/dt)
+  , vy :: Number       -- ^ Brush velocity Y (dy/dt)
+  , radius :: Number   -- ^ Brush influence radius
+  , strength :: Number -- ^ Drag strength (0-1)
+  }
+
+-- | Apply brush drag to paint particles.
+-- |
+-- | When the user drags their finger/stylus across wet paint,
+-- | particles within the brush radius are pulled along.
+-- | This creates the "finger painting" smearing effect.
+-- |
+-- | ## Physics
+-- |
+-- | Particles receive velocity in the direction of brush motion,
+-- | modulated by:
+-- | - Distance from brush center (closer = more drag)
+-- | - Particle wetness (wet paint smears, dry paint doesn't)
+-- | - Particle viscosity (thick paint resists more)
+-- | - Brush strength (pressure-sensitive)
+applyBrushDrag :: BrushDrag -> PaintSystem -> PaintSystem
+applyBrushDrag brush sys =
+  let
+    -- Apply drag force to a single particle
+    applyDrag :: PaintParticle -> PaintParticle
+    applyDrag p =
+      let
+        -- Distance from brush to particle
+        dx = p.x - brush.x
+        dy = p.y - brush.y
+        dist = Num.sqrt (dx * dx + dy * dy)
+        
+        -- Only affect particles within brush radius
+        inRange = dist < brush.radius
+        
+        -- Distance falloff: 1.0 at center, 0.0 at edge
+        falloff = if inRange 
+          then (1.0 - dist / brush.radius) * (1.0 - dist / brush.radius)
+          else 0.0
+        
+        -- Wetness modulation: only wet paint moves
+        wetMod = unwrapWetness p.wetness / 100.0
+        
+        -- Viscosity resistance: thick paint resists drag
+        -- High viscosity = low drag coefficient
+        viscResist = 1.0 - (unwrapViscosity p.viscosity / 150.0)
+        viscMod = max 0.1 viscResist
+        
+        -- Combined drag coefficient
+        dragCoeff = falloff * wetMod * viscMod * brush.strength
+        
+        -- Apply velocity from brush motion
+        newVx = p.vx + brush.vx * dragCoeff
+        newVy = p.vy + brush.vy * dragCoeff
+        
+        -- Also slightly move position for immediate response
+        newX = p.x + brush.vx * dragCoeff * 0.1
+        newY = p.y + brush.vy * dragCoeff * 0.1
+      in
+        if inRange && wetMod > 0.01
+          then p { vx = newVx, vy = newVy, x = newX, y = newY }
+          else p
+  in
+    sys { particles = map applyDrag sys.particles }
+
+-- | Create brush drag from pointer movement.
+-- |
+-- | Takes current and previous positions to calculate velocity.
+mkBrushDrag 
+  :: Number  -- ^ Current X
+  -> Number  -- ^ Current Y  
+  -> Number  -- ^ Previous X
+  -> Number  -- ^ Previous Y
+  -> Number  -- ^ Brush radius
+  -> Number  -- ^ Pressure (0-1)
+  -> BrushDrag
+mkBrushDrag cx cy px py radius pressure =
+  { x: cx
+  , y: cy
+  , vx: (cx - px) * 2.0  -- Scale up for responsiveness
+  , vy: (cy - py) * 2.0
+  , radius: radius
+  , strength: pressure
+  }
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                   // analysis

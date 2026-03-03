@@ -62,6 +62,19 @@ module Canvas.Runtime.DOM
   , readRef
   , writeRef
   , modifyRef
+  
+  -- * Canvas Export (FFI)
+  , exportCanvasPNG
+  , exportCanvasSVG
+  
+  -- * Canvas Texture (FFI)
+  , initCanvasTexture
+  , renderCanvasTexture
+  , hasCanvasTexture
+  
+  -- * Keyboard Shortcuts (FFI)
+  , KeyboardShortcut
+  , addKeyboardShortcutListener
   ) where
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -76,6 +89,7 @@ import Prelude
   , unit
   , ($)
   , (<>)
+  , (==)
   )
 
 import Effect (Effect)
@@ -83,6 +97,7 @@ import Effect.Console (log)
 import Data.Either (Either(Left, Right))
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Nullable (Nullable, toMaybe)
+import Data.Foldable (traverse_)
 
 import Hydrogen.Render.Element (Element)
 import Hydrogen.Target.Static as Static
@@ -93,7 +108,7 @@ import Hydrogen.Runtime.App
   , TouchEvent
   , DeviceOrientationEvent
   )
-import Hydrogen.Runtime.Cmd (Transition)
+import Hydrogen.Runtime.Cmd (Transition, Cmd(None, Log))
 
 -- GPU Runtime
 import Canvas.Runtime.GPU as GPU
@@ -262,20 +277,8 @@ type MountHandle =
 unmount :: MountHandle -> Effect Unit
 unmount handle = do
   handle.unsubscribeAnimation
-  unsubscribeAll handle.unsubscribeEvents
-  where
-    unsubscribeAll :: Array Unsubscribe -> Effect Unit
-    unsubscribeAll [] = pure unit
-    unsubscribeAll unsubs = do
-      -- Call each unsubscribe function
-      traverseEffect_ unsubs
-
-    traverseEffect_ :: Array (Effect Unit) -> Effect Unit
-    traverseEffect_ [] = pure unit
-    traverseEffect_ _effects = do
-      -- Execute all effects
-      -- Note: In real code we'd use traverse_, but keeping minimal
-      pure unit
+  -- Execute each unsubscribe effect to clean up event listeners
+  traverse_ (\unsub -> unsub) handle.unsubscribeEvents
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                      // mount
@@ -299,7 +302,12 @@ unmount handle = do
 -- | ```purescript
 -- | mount "#app" myApp update view init
 -- |   (\state -> Paint.allParticles (State.paintSystem state))
+-- |   View.Tick  -- toTickMsg constructor
 -- | ```
+-- | Mount a Hydrogen App and return a MountHandle for cleanup.
+-- |
+-- | The MountHandle can be used to stop the animation loop and clean up.
+-- | This prevents memory leaks when remounting the app.
 mount
   :: forall state msg
    . String                              -- ^ CSS selector for mount target
@@ -308,8 +316,10 @@ mount
   -> (state -> Element msg)              -- ^ View function
   -> Transition state msg                -- ^ Initial state
   -> (state -> Array Paint.Particle)     -- ^ Extract particles from state for GPU rendering
+  -> (Number -> msg)                     -- ^ Tick message constructor (e.g., View.Tick)
+  -> (KeyboardShortcut -> msg)           -- ^ Keyboard shortcut message constructor
   -> Effect Unit
-mount selector _app update view initialTransition getParticles = do
+mount selector _app update view initialTransition getParticles toTickMsg toKeyboardShortcutMsg = do
   log $ "Canvas: Mounting to " <> selector
   
   maybeEl <- selectElement selector
@@ -327,6 +337,9 @@ mount selector _app update view initialTransition getParticles = do
       -- Create GPU runtime ref (will be initialized after first render)
       gpuRef <- newRef (Nothing :: Maybe GPU.GPURuntime)
       
+      -- Create ref to store cancel function for cleanup
+      cancelRef <- newRef (pure unit :: Effect Unit)
+      
       -- Initial render
       renderToElement rootEl view initialTransition.state
       
@@ -334,25 +347,49 @@ mount selector _app update view initialTransition getParticles = do
       initGPURuntime gpuRef
       
       -- Set up animation frame loop
-      _cancelAnimation <- requestAnimationFrame $ \deltaTime -> do
+      cancelAnimation <- requestAnimationFrame $ \deltaTime -> do
         currentState <- readRef stateRef
         -- In a full implementation, we would:
         -- 1. Check subscriptions
         -- 2. Dispatch Tick message
         -- 3. Update state
-        -- 4. Re-render
-        -- For now, just re-render on each frame (inefficient but works)
-        let tickMsg = unsafeCoerceTick deltaTime
+        -- 4. Execute commands
+        -- 5. Re-render
+        let tickMsg = toTickMsg deltaTime
         let newTransition = update tickMsg currentState
         writeRef stateRef newTransition.state
+        
+        -- Execute any commands from the transition
+        executeCmd newTransition.cmd
+        
         renderToElement rootEl view newTransition.state
         
         -- GPU render particles after DOM update (using passed extraction function)
         renderGPUParticles gpuRef (getParticles newTransition.state)
       
+      -- Store cancel function for potential cleanup
+      writeRef cancelRef cancelAnimation
+      
+      -- Set up keyboard shortcut listener
+      -- This dispatches KeyboardShortcut messages to the update function
+      _cancelKeyboard <- addKeyboardShortcutListener $ \shortcut -> do
+        currentState <- readRef stateRef
+        let shortcutMsg = toKeyboardShortcutMsg shortcut
+        let newTransition = update shortcutMsg currentState
+        writeRef stateRef newTransition.state
+        executeCmd newTransition.cmd
+        renderToElement rootEl view newTransition.state
+        renderGPUParticles gpuRef (getParticles newTransition.state)
+      
+      -- Expose cleanup function globally for debugging/testing
+      setGlobalUnmountImpl cancelAnimation
+      
       log "Canvas: Animation loop started"
       log "Canvas: Mount complete!"
       pure unit
+
+-- | Set the global unmount function (for debugging/hot reload).
+foreign import setGlobalUnmountImpl :: Effect Unit -> Effect Unit
 
 -- | Render an Element to a DOM element using static HTML
 -- |
@@ -364,11 +401,29 @@ renderToElement el view state = do
   let html = Static.render element
   setInnerHTML el html
 
--- | UNSAFE: Coerce a number to a Tick message
+-- | Execute a command (simple implementation for core commands).
 -- |
--- | This is a temporary hack. In a proper implementation,
--- | we'd have proper message routing through the App type.
-foreign import unsafeCoerceTick :: forall msg. Number -> msg
+-- | This is a minimal command executor that handles the most common
+-- | commands. A full implementation would handle all Cmd variants.
+-- |
+-- | Special handling for "EXPORT:png" and "EXPORT:svg" log commands
+-- | which trigger canvas export functionality.
+executeCmd :: forall msg. Cmd msg -> Effect Unit
+executeCmd cmd = case cmd of
+  None -> pure unit
+  Log text -> 
+    -- Check for special export commands
+    if text == "EXPORT:png" then do
+      log "Canvas: Exporting as PNG..."
+      exportCanvasPNG
+    else if text == "EXPORT:svg" then do
+      log "Canvas: Exporting as SVG..."
+      exportCanvasSVG
+    else
+      log text
+  _ -> pure unit  -- Other commands not yet implemented
+
+
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                              // gpu rendering
@@ -377,9 +432,15 @@ foreign import unsafeCoerceTick :: forall msg. Number -> msg
 -- | Initialize GPU runtime if not already initialized.
 -- |
 -- | Called after first DOM render when the canvas element exists.
+-- | Also initializes the procedural linen canvas texture.
 initGPURuntime :: Ref (Maybe GPU.GPURuntime) -> Effect Unit
 initGPURuntime gpuRef = do
   log "Canvas: Initializing GPU runtime..."
+  
+  -- Initialize canvas texture first
+  log "Canvas: Generating linen texture..."
+  initCanvasTextureImpl "paint-canvas"
+  
   result <- GPU.initialize "paint-canvas"
   case result of
     Left err -> do
@@ -405,11 +466,98 @@ setGPUStatusText = setGPUStatusTextImpl
 -- |
 -- | Called after each DOM update in the animation loop.
 -- | Takes particles directly (extracted by the caller) to avoid type coercion.
+-- | Renders canvas texture background first, then particles on top.
 renderGPUParticles :: Ref (Maybe GPU.GPURuntime) -> Array Paint.Particle -> Effect Unit
 renderGPUParticles gpuRef particles = do
+  -- First render the linen canvas texture background
+  renderCanvasTextureImpl "paint-canvas"
+  
   maybeGpu <- readRef gpuRef
   case maybeGpu of
     Nothing -> pure unit  -- GPU not available, SVG fallback is shown
     Just runtime -> do
-      -- Clear with paper color background and render particles
-      GPU.renderFrame runtime { r: 0.96, g: 0.96, b: 0.86, a: 1.0 } particles
+      -- Render particles on top of texture (no clear, preserve texture)
+      GPU.renderParticles runtime particles
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                            // canvas export
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Export the GPU canvas as PNG and trigger download.
+-- |
+-- | Uses the canvas element's toDataURL method.
+foreign import exportCanvasPNGImpl :: String -> Effect Unit
+
+-- | Export the SVG fallback layer as SVG file and trigger download.
+-- |
+-- | Serializes the SVG element to a string and creates a download blob.
+foreign import exportCanvasSVGImpl :: String -> Effect Unit
+
+-- | Export canvas as PNG.
+-- |
+-- | Exports the paint-canvas element to a PNG file download.
+exportCanvasPNG :: Effect Unit
+exportCanvasPNG = exportCanvasPNGImpl "paint-canvas"
+
+-- | Export canvas as SVG.
+-- |
+-- | Exports the SVG fallback layer to an SVG file download.
+exportCanvasSVG :: Effect Unit
+exportCanvasSVG = exportCanvasSVGImpl "paint-svg-fallback"
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                            // canvas texture
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Initialize procedural linen/cloth canvas texture.
+-- |
+-- | Generates a realistic canvas surface that looks like real artist canvas.
+-- | Should be called once after the canvas element is created.
+foreign import initCanvasTextureImpl :: String -> Effect Unit
+
+-- | Render the canvas texture as background.
+-- |
+-- | Fills the canvas with the linen texture pattern.
+-- | Called before rendering particles each frame.
+foreign import renderCanvasTextureImpl :: String -> Effect Unit
+
+-- | Check if canvas texture is initialized.
+foreign import hasCanvasTextureImpl :: Effect Boolean
+
+-- | Initialize canvas texture for the paint canvas.
+initCanvasTexture :: Effect Unit
+initCanvasTexture = initCanvasTextureImpl "paint-canvas"
+
+-- | Render canvas texture background.
+renderCanvasTexture :: Effect Unit
+renderCanvasTexture = renderCanvasTextureImpl "paint-canvas"
+
+-- | Check if canvas texture is available.
+hasCanvasTexture :: Effect Boolean
+hasCanvasTexture = hasCanvasTextureImpl
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                       // keyboard shortcuts
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Keyboard shortcut event with modifier keys.
+-- |
+-- | Captures full keyboard events including Ctrl/Cmd, Shift, Alt modifiers
+-- | for implementing standard shortcuts like Ctrl+Z (undo), Ctrl+S (save).
+type KeyboardShortcut =
+  { key :: String              -- ^ Key value (e.g., "z", "Z", "ArrowUp", "Escape")
+  , ctrlKey :: Boolean         -- ^ Ctrl (or Cmd on macOS) pressed
+  , shiftKey :: Boolean        -- ^ Shift pressed
+  , altKey :: Boolean          -- ^ Alt (or Option on macOS) pressed
+  }
+
+-- | Add keyboard shortcut listener.
+-- |
+-- | Listens for keydown events with full modifier information.
+-- | Automatically handles Ctrl/Cmd normalization for cross-platform support.
+-- | Returns an unsubscribe function.
+foreign import addKeyboardShortcutListenerImpl 
+  :: (KeyboardShortcut -> Effect Unit) -> Effect Unsubscribe
+
+addKeyboardShortcutListener :: (KeyboardShortcut -> Effect Unit) -> Effect Unsubscribe
+addKeyboardShortcutListener = addKeyboardShortcutListenerImpl

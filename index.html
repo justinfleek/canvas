@@ -376,6 +376,9 @@
     </div>
   </div>
 
+  <!-- Load the bundled PureScript app -->
+  <script src="dist/canvas.js"></script>
+
   <script type="module">
     // ═══════════════════════════════════════════════════════════════════════════
     // VIRTUAL TILT CONTROLLER
@@ -491,11 +494,12 @@
         }
         
         // Run the bundled PureScript app (loaded via script tag)
-        if (window.Main && window.Main.main) {
-          window.Main.main();
+        // The entry point is Canvas.App, not Main
+        if (window.CanvasApp && window.CanvasApp.main) {
+          window.CanvasApp.main();
         } else {
           // Fallback to ES module import
-          const { main } = await import('./output/Main/index.js');
+          const { main } = await import('./output/Canvas.App/index.js');
           main();
         }
         

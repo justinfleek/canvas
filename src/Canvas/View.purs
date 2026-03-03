@@ -77,6 +77,7 @@ module Canvas.View
       , MoveLayerDown
       -- Easter egg events
       , KeyDown
+      , KeyboardShortcut
       , DeviceMotion
       -- Viewport gesture events
       , ViewportPan
@@ -118,20 +119,17 @@ import Prelude
   , (/)
   , (<)
   , (>)
-  , (>=)
-  , (<=)
   , (+)
   , (-)
   , map
   , negate
   , not
   , (==)
-  , (/=)
   , (&&)
   )
 
 import Data.Array (length) as Array
-import Data.Maybe (Maybe(Just, Nothing), fromMaybe)
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.String.CodeUnits (charAt, singleton) as Str
 import Data.Tuple (Tuple(Tuple))
 
@@ -153,6 +151,15 @@ import Hydrogen.Render.Element
   , class_
   , styles
   , id_
+  )
+
+-- ARIA accessibility attributes
+import Hydrogen.Render.Element.Attributes
+  ( ariaAtomic
+  , ariaLabel
+  , ariaLive
+  , role
+  , tabIndex
   )
 
 -- Hydrogen Brush System
@@ -255,6 +262,12 @@ data Msg
   | MoveLayerDown LayerId                -- ^ Move layer down in stack
   -- Easter egg events
   | KeyDown String                       -- ^ Key pressed (for Konami code)
+  | KeyboardShortcut                     -- ^ Full keyboard event with modifiers
+      { key :: String                    -- ^ Key (e.g., "z", "y", "ArrowUp")
+      , ctrlKey :: Boolean               -- ^ Ctrl/Cmd pressed
+      , shiftKey :: Boolean              -- ^ Shift pressed
+      , altKey :: Boolean                -- ^ Alt pressed
+      }
   | DeviceMotion                         -- ^ Device motion event (for shake detection)
       { accelerationX :: Number
       , accelerationY :: Number
@@ -305,6 +318,7 @@ instance showMsg :: Show Msg where
   show (MoveLayerUp lid) = "MoveLayerUp(" <> show lid <> ")"
   show (MoveLayerDown lid) = "MoveLayerDown(" <> show lid <> ")"
   show (KeyDown key) = "KeyDown(" <> key <> ")"
+  show (KeyboardShortcut k) = "KeyboardShortcut(" <> k.key <> " ctrl=" <> show k.ctrlKey <> " shift=" <> show k.shiftKey <> ")"
   show (DeviceMotion m) = "DeviceMotion(ax=" <> show m.accelerationX <> ",ay=" <> show m.accelerationY <> ")"
   show (ViewportPan dx dy) = "ViewportPan(" <> show dx <> "," <> show dy <> ")"
   show (ViewportZoom s) = "ViewportZoom(" <> show s <> ")"
@@ -323,10 +337,18 @@ instance showMsg :: Show Msg where
 -- |
 -- | Pure function that renders the entire application.
 -- | Includes confetti overlay for easter egg celebration.
+-- |
+-- | ## Accessibility
+-- | - Main container has role="application" for complex widget
+-- | - Regions are labeled with ARIA landmarks
+-- | - Live region for status announcements
 view :: AppState -> Element Msg
 view state =
   div_
-    ([ class_ "canvas-app" ] <> styles
+    ([ class_ "canvas-app"
+    , role "application"
+    , ariaLabel "Canvas Paint Application"
+    ] <> styles
         [ Tuple "display" "flex"
         , Tuple "flex-direction" "column"
         , Tuple "width" "100vw"
@@ -337,7 +359,10 @@ view state =
         ])
     [ renderToolbar state
     , div_
-        ([ class_ "canvas-main" ] <> styles
+        ([ class_ "canvas-main"
+        , role "main"
+        , ariaLabel "Main canvas workspace"
+        ] <> styles
             [ Tuple "flex" "1"
             , Tuple "display" "flex"
             , Tuple "position" "relative"
@@ -367,10 +392,17 @@ renderConfettiOverlay state =
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Toolbar with tools, brushes, media, and actions.
+-- |
+-- | ## Accessibility
+-- | - Toolbar role for screen readers
+-- | - Contains tool groups with group roles
 renderToolbar :: AppState -> Element Msg
 renderToolbar state =
   div_
-    ([ class_ "canvas-toolbar" ] <> styles
+    ([ class_ "canvas-toolbar"
+    , role "toolbar"
+    , ariaLabel "Canvas tools"
+    ] <> styles
         [ Tuple "display" "flex"
         , Tuple "gap" "8px"
         , Tuple "padding" "8px"
@@ -384,24 +416,37 @@ renderToolbar state =
     ]
 
 -- | Tool selection buttons.
+-- |
+-- | ## Accessibility
+-- | - Group role for related buttons
+-- | - Each tool button has ariaLabel
 renderToolButtons :: AppState -> Element Msg
 renderToolButtons state =
   div_
-    ([ class_ "tool-buttons" ] <> styles [ Tuple "display" "flex", Tuple "gap" "4px" ])
-    [ toolButton BrushTool "Brush" state
-    , toolButton EraserTool "Eraser" state
-    , toolButton PanTool "Pan" state
-    , toolButton EyedropperTool "Pick" state
+    ([ class_ "tool-buttons"
+    , role "group"
+    , ariaLabel "Drawing tools"
+    ] <> styles [ Tuple "display" "flex", Tuple "gap" "4px" ])
+    [ toolButton BrushTool "Brush" "Paint brush tool" state
+    , toolButton EraserTool "Eraser" "Eraser tool" state
+    , toolButton PanTool "Pan" "Pan and move canvas" state
+    , toolButton EyedropperTool "Pick" "Color picker tool" state
     ]
 
 -- | Single tool button.
-toolButton :: Tool -> String -> AppState -> Element Msg
-toolButton tool label state =
+-- |
+-- | ## Accessibility
+-- | - ariaLabel describes the tool function
+-- | - aria-pressed indicates if tool is active
+toolButton :: Tool -> String -> String -> AppState -> Element Msg
+toolButton tool label description state =
   let isActive = State.currentTool state == tool
       activeClass = if isActive then "tool-btn active" else "tool-btn"
   in button_
     ([ class_ activeClass
     , onClick (ToolSelected tool)
+    , ariaLabel description
+    , E.attr "aria-pressed" (if isActive then "true" else "false")
     ] <> styles
         [ Tuple "padding" "8px 12px"
         , Tuple "border" "none"
@@ -413,23 +458,39 @@ toolButton tool label state =
     [ text label ]
 
 -- | Action buttons (clear, undo, redo, play/pause).
+-- |
+-- | ## Accessibility
+-- | - Group role for related actions
+-- | - Each button has descriptive ariaLabel
 renderActionButtons :: AppState -> Element Msg
 renderActionButtons state =
   div_
-    ([ class_ "action-buttons" ] <> styles [ Tuple "display" "flex", Tuple "gap" "4px", Tuple "margin-left" "auto" ])
-    [ actionButton Undo "Undo" (State.canUndo state)
-    , actionButton Redo "Redo" (State.canRedo state)
-    , actionButton ClearCanvas "Clear" true
-    , actionButton ToggleGravity "Gravity" true
-    , actionButton TogglePlaying (if State.isPlaying state then "Pause" else "Play") true
+    ([ class_ "action-buttons"
+    , role "group"
+    , ariaLabel "Canvas actions"
+    ] <> styles [ Tuple "display" "flex", Tuple "gap" "4px", Tuple "margin-left" "auto" ])
+    [ actionButton Undo "Undo" "Undo last action (Ctrl+Z)" (State.canUndo state)
+    , actionButton Redo "Redo" "Redo undone action (Ctrl+Shift+Z)" (State.canRedo state)
+    , actionButton ClearCanvas "Clear" "Clear all paint from canvas" true
+    , actionButton ToggleGravity "Gravity" "Toggle gravity effect" true
+    , actionButton TogglePlaying 
+        (if State.isPlaying state then "Pause" else "Play") 
+        (if State.isPlaying state then "Pause physics simulation" else "Resume physics simulation")
+        true
     ]
 
 -- | Single action button.
-actionButton :: Msg -> String -> Boolean -> Element Msg
-actionButton msg label enabled =
+-- |
+-- | ## Accessibility
+-- | - ariaLabel describes the action
+-- | - aria-disabled for disabled buttons
+actionButton :: Msg -> String -> String -> Boolean -> Element Msg
+actionButton msg label description enabled =
   button_
     ([ class_ "action-btn"
     , onClick msg
+    , ariaLabel description
+    , E.attr "aria-disabled" (if enabled then "false" else "true")
     ] <> styles
         [ Tuple "padding" "8px 12px"
         , Tuple "border" "none"
@@ -550,11 +611,21 @@ mediaLabel WetIntoWet = "W/W"
 -- | extraction happens in the DOM runtime via subscription event listeners in
 -- | Main.purs (handleMouseDown, handleTouchStart, etc.) which have access to
 -- | the raw browser events and extract clientX/clientY.
+-- |
+-- | ## Accessibility
+-- | - role="img" for screen readers (canvas is a complex image)
+-- | - ariaLabel describes the canvas content
+-- | - tabIndex allows keyboard focus for shortcuts
 renderCanvas :: AppState -> Element Msg
 renderCanvas state =
-  div_
+  let particleCount = Paint.particleCount (State.paintSystem state)
+      canvasDescription = "Paint canvas with " <> show particleCount <> " particles. Press Tab to focus, then use Ctrl+Z to undo, Ctrl+Shift+Z to redo."
+  in div_
     ([ class_ "canvas-surface"
     , id_ "paint-canvas"
+    , role "img"
+    , ariaLabel canvasDescription
+    , tabIndex 0  -- Make canvas focusable for keyboard shortcuts
     -- Event handlers are placeholders - real input comes from subscriptions
     , onMouseDown (CanvasTouched 0.0 0.0)
     , onMouseMove (CanvasMoved 0.0 0.0)
@@ -569,6 +640,7 @@ renderCanvas state =
         , Tuple "overflow" "hidden"
         , Tuple "cursor" "crosshair"
         , Tuple "min-width" "0"  -- Allow flex shrinking
+        , Tuple "outline" "none"  -- Remove default focus outline (handled by :focus-visible CSS)
         ])
     [ renderPaintLayers state
     , renderGravityIndicator state
@@ -773,11 +845,20 @@ renderDebugOverlay state =
 -- | Status bar at bottom showing stats.
 -- |
 -- | The GPU backend indicator has id "gpu-backend" and is updated by the runtime.
+-- |
+-- | ## Accessibility
+-- | - contentinfo landmark for footer
+-- | - Live region for status updates
 renderStatusBar :: AppState -> Element Msg
 renderStatusBar state =
   let particleCount = Paint.particleCount (State.paintSystem state)
   in div_
-    ([ class_ "canvas-statusbar" ] <> styles
+    ([ class_ "canvas-statusbar"
+    , role "contentinfo"
+    , ariaLabel "Canvas status"
+    , ariaLive "polite"
+    , ariaAtomic "false"
+    ] <> styles
         [ Tuple "display" "flex"
         , Tuple "gap" "16px"
         , Tuple "padding" "4px 8px"
@@ -786,10 +867,14 @@ renderStatusBar state =
         , Tuple "font-size" "11px"
         , Tuple "color" "#888"
         ])
-    [ span_ [] [ text ("Particles: " <> show particleCount) ]
-    , span_ [] [ text ("Layers: " <> show (State.layerCount state)) ]
+    [ span_ [ ariaLabel ("Particle count: " <> show particleCount) ] 
+        [ text ("Particles: " <> show particleCount) ]
+    , span_ [ ariaLabel ("Layer count: " <> show (State.layerCount state)) ]
+        [ text ("Layers: " <> show (State.layerCount state)) ]
     , span_ 
-        ([ id_ "gpu-backend" ] <> styles 
+        ([ id_ "gpu-backend"
+        , ariaLabel "GPU rendering backend"
+        ] <> styles 
             [ Tuple "color" "#4a9eff"
             , Tuple "font-weight" "bold"
             ])
@@ -806,6 +891,11 @@ renderStatusBar state =
 -- | Displays layers sorted by Z-index, with the active layer highlighted.
 -- | Uses LayerId for selection and Layer type for display.
 -- | Includes controls for visibility, reordering, and deletion.
+-- |
+-- | ## Accessibility
+-- | - complementary landmark for sidebar
+-- | - List role for layer stack
+-- | - Individual layers are selectable with keyboard
 renderLayerPanel :: AppState -> Element Msg
 renderLayerPanel state =
   let 
@@ -814,7 +904,10 @@ renderLayerPanel state =
     activeId = State.activeLayerId state
     layerCount = Array.length layers
   in div_
-    ([ class_ "layer-panel" ] <> styles
+    ([ class_ "layer-panel"
+    , role "complementary"
+    , ariaLabel "Layer panel"
+    ] <> styles
         [ Tuple "width" "180px"
         , Tuple "padding" "8px"
         , Tuple "background" "#1a1a2e"
@@ -836,6 +929,7 @@ renderLayerPanel state =
             ([ class_ "add-layer-btn"
             , onClick AddLayer
             , E.title "Add new layer"
+            , ariaLabel "Add new layer"
             ] <> styles
                 [ Tuple "padding" "4px 8px"
                 , Tuple "border" "none"
@@ -849,7 +943,10 @@ renderLayerPanel state =
         ]
     -- Layer list
     , div_
-        ([ class_ "layer-list" ] <> styles
+        ([ class_ "layer-list"
+        , role "list"
+        , ariaLabel ("Layer stack with " <> show layerCount <> " layers")
+        ] <> styles
             [ Tuple "display" "flex"
             , Tuple "flex-direction" "column"
             , Tuple "gap" "2px"
@@ -984,6 +1081,10 @@ renderLayerItem activeId totalLayers layer =
 -- | - Brush opacity (0-100%)
 -- | - Color picker
 -- | - Export button
+-- |
+-- | ## Accessibility
+-- | - complementary landmark for sidebar
+-- | - Controls have descriptive labels
 renderPropertiesPanel :: AppState -> Element Msg
 renderPropertiesPanel state =
   let 
@@ -992,7 +1093,10 @@ renderPropertiesPanel state =
     opacityValue = config.opacity
     currentColor = config.color
   in div_
-    ([ class_ "properties-panel" ] <> styles
+    ([ class_ "properties-panel"
+    , role "complementary"
+    , ariaLabel "Brush properties panel"
+    ] <> styles
         [ Tuple "width" "200px"
         , Tuple "padding" "8px"
         , Tuple "background" "#1a1a2e"
@@ -1006,10 +1110,10 @@ renderPropertiesPanel state =
       span_ (styles [ Tuple "color" "#888", Tuple "font-weight" "bold" ]) [ text "Properties" ]
     
     -- Brush Size
-    , renderSliderControl "Size" sizeValue 1.0 500.0 BrushSizeChanged
+    , renderSliderControl "Size" "Brush size in pixels" sizeValue 1.0 500.0 BrushSizeChanged
     
     -- Brush Opacity  
-    , renderSliderControl "Opacity" (opacityValue * 100.0) 0.0 100.0 
+    , renderSliderControl "Opacity" "Brush opacity percentage" (opacityValue * 100.0) 0.0 100.0 
         (\v -> BrushOpacityChanged (v / 100.0))
     
     -- Color Picker
@@ -1017,7 +1121,9 @@ renderPropertiesPanel state =
     
     -- Export buttons
     , div_
-        (styles [ Tuple "margin-top" "auto" ])
+        ([ role "group"
+        , ariaLabel "Export options"
+        ] <> styles [ Tuple "margin-top" "auto" ])
         [ span_ (styles [ Tuple "color" "#888", Tuple "display" "block", Tuple "margin-bottom" "4px" ]) 
             [ text "Export" ]
         , div_
@@ -1026,6 +1132,7 @@ renderPropertiesPanel state =
                 ([ class_ "export-btn"
                 , onClick (ExportCanvas "png")
                 , E.title "Export as PNG"
+                , ariaLabel "Export canvas as PNG image"
                 ] <> styles
                     [ Tuple "flex" "1"
                     , Tuple "padding" "8px"
@@ -1040,6 +1147,7 @@ renderPropertiesPanel state =
                 ([ class_ "export-btn"
                 , onClick (ExportCanvas "svg")
                 , E.title "Export as SVG"
+                , ariaLabel "Export canvas as SVG vector image"
                 ] <> styles
                     [ Tuple "flex" "1"
                     , Tuple "padding" "8px"
@@ -1058,10 +1166,17 @@ renderPropertiesPanel state =
 -- |
 -- | Emits messages when slider changes (via onInput).
 -- | Shows current value next to label.
-renderSliderControl :: String -> Number -> Number -> Number -> (Number -> Msg) -> Element Msg
-renderSliderControl label currentVal minVal maxVal toMsg =
+-- |
+-- | ## Accessibility
+-- | - slider role for the control group
+-- | - Buttons have descriptive labels
+renderSliderControl :: String -> String -> Number -> Number -> Number -> (Number -> Msg) -> Element Msg
+renderSliderControl label description currentVal minVal maxVal toMsg =
   div_
-    ([ class_ "slider-control" ] <> styles
+    ([ class_ "slider-control"
+    , role "group"
+    , ariaLabel description
+    ] <> styles
         [ Tuple "display" "flex"
         , Tuple "flex-direction" "column"
         , Tuple "gap" "4px"
@@ -1079,6 +1194,7 @@ renderSliderControl label currentVal minVal maxVal toMsg =
           button_
             ([ class_ "slider-btn"
             , onClick (toMsg (clampNumber (currentVal - stepForRange minVal maxVal) minVal maxVal))
+            , ariaLabel ("Decrease " <> label)
             ] <> styles
                 [ Tuple "width" "24px"
                 , Tuple "height" "24px"
@@ -1091,7 +1207,12 @@ renderSliderControl label currentVal minVal maxVal toMsg =
             [ text "-" ]
         -- Progress bar showing current value
         , div_
-            (styles
+            ([ role "progressbar"
+            , E.attr "aria-valuenow" (show currentVal)
+            , E.attr "aria-valuemin" (show minVal)
+            , E.attr "aria-valuemax" (show maxVal)
+            , ariaLabel (label <> " value: " <> formatNumber currentVal)
+            ] <> styles
                 [ Tuple "flex" "1"
                 , Tuple "height" "8px"
                 , Tuple "background" "#2a2a4e"
@@ -1110,6 +1231,7 @@ renderSliderControl label currentVal minVal maxVal toMsg =
         , button_
             ([ class_ "slider-btn"
             , onClick (toMsg (clampNumber (currentVal + stepForRange minVal maxVal) minVal maxVal))
+            , ariaLabel ("Increase " <> label)
             ] <> styles
                 [ Tuple "width" "24px"
                 , Tuple "height" "24px"
@@ -1150,8 +1272,11 @@ formatNumber n =
   in truncateDecimals s 1
 
 -- | Truncate string to max decimal places.
+-- |
+-- | TODO: Implement proper decimal truncation.
+-- | For now, just returns the original string.
 truncateDecimals :: String -> Int -> String
-truncateDecimals s maxDecimals =
+truncateDecimals s _maxDecimals =
   -- Simple approach: just show the number
   -- A proper implementation would parse and format
   s
@@ -1164,10 +1289,18 @@ truncateDecimals s maxDecimals =
 -- |
 -- | Displays a grid of preset colors for quick selection.
 -- | Shows the current selected color with a preview.
+-- |
+-- | ## Accessibility
+-- | - Group role for color controls
+-- | - Color preview has ariaLabel
+-- | - Each preset has color description
 renderColorPicker :: Color -> Element Msg
 renderColorPicker currentColor =
   div_
-    ([ class_ "color-picker" ] <> styles
+    ([ class_ "color-picker"
+    , role "group"
+    , ariaLabel "Color picker"
+    ] <> styles
         [ Tuple "display" "flex"
         , Tuple "flex-direction" "column"
         , Tuple "gap" "8px"
@@ -1177,7 +1310,10 @@ renderColorPicker currentColor =
     
     -- Current color preview
     , div_
-        ([ class_ "current-color" ] <> styles
+        ([ class_ "current-color"
+        , role "img"
+        , ariaLabel ("Current color: " <> colorToHex currentColor)
+        ] <> styles
             [ Tuple "width" "100%"
             , Tuple "height" "32px"
             , Tuple "border-radius" "4px"
@@ -1188,7 +1324,10 @@ renderColorPicker currentColor =
     
     -- Color presets grid
     , div_
-        ([ class_ "color-presets" ] <> styles
+        ([ class_ "color-presets"
+        , role "listbox"
+        , ariaLabel "Color presets"
+        ] <> styles
             [ Tuple "display" "grid"
             , Tuple "grid-template-columns" "repeat(5, 1fr)"
             , Tuple "gap" "4px"
@@ -1197,18 +1336,25 @@ renderColorPicker currentColor =
     ]
 
 -- | Render a single color preset button.
+-- |
+-- | ## Accessibility
+-- | - option role for listbox
+-- | - ariaLabel with color hex value
 renderColorPreset :: Color -> Element Msg
 renderColorPreset color =
-  button_
+  let hexColor = colorToHex color
+  in button_
     ([ class_ "color-preset"
     , onClick (ColorChanged color)
-    , E.title (colorToHex color)
+    , E.title hexColor
+    , role "option"
+    , ariaLabel ("Select color " <> hexColor)
     ] <> styles
         [ Tuple "width" "100%"
         , Tuple "aspect-ratio" "1"
         , Tuple "border" "none"
         , Tuple "border-radius" "4px"
-        , Tuple "background" (colorToHex color)
+        , Tuple "background" hexColor
         , Tuple "cursor" "pointer"
         , Tuple "padding" "0"
         ])

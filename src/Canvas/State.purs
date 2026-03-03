@@ -79,6 +79,11 @@ module Canvas.State
   , clearActiveLayer
   , simulatePaint
   
+  -- * Drag Physics (finger painting)
+  , applyBrushDragFromPointer
+  , setPointerDown
+  , setPointerUp
+  
   -- * Gravity Operations
   , updateGravity
   , setGravityEnabled
@@ -189,12 +194,15 @@ import Canvas.Layer.Types
 import Canvas.Paint.Particle
   ( PaintSystem
   , PaintPreset(Watercolor)
+  , BrushDrag
   , mkPaintSystem
   , emptyPaintSystem
   , addParticle
   , clearParticles
   , simulateStep
   , applyGravity
+  , applyBrushDrag
+  , mkBrushDrag
   , particleCount
   , presetName
   ) as Paint
@@ -393,6 +401,11 @@ type AppState =
   -- Gesture tracking (for two-finger pan/pinch/rotate)
   , gesture :: GestureTrackingState
   
+  -- Pointer tracking (for drag physics)
+  , lastPointerX :: Number      -- ^ Previous pointer X for drag velocity
+  , lastPointerY :: Number      -- ^ Previous pointer Y for drag velocity
+  , pointerDown :: Boolean      -- ^ Is pointer currently down?
+  
   -- Debug
   , showDebugOverlay :: Boolean
   }
@@ -420,6 +433,9 @@ mkAppState width height =
     , maxHistorySize: 50
     , easterEggs: Easter.initialState
     , gesture: initialGestureTracking
+    , lastPointerX: 0.0
+    , lastPointerY: 0.0
+    , pointerDown: false
     , showDebugOverlay: false
     }
 
@@ -570,6 +586,51 @@ addPaintParticleWithDynamics px py pressure tiltX tiltY s =
 -- | Clear all particles from active layer.
 clearActiveLayer :: AppState -> AppState
 clearActiveLayer s = s { paint = Paint.clearParticles s.paint }
+
+-- | Apply brush drag when pointer moves.
+-- |
+-- | This is the "finger painting" effect - when the user drags their
+-- | finger/stylus across wet paint, it smears and moves.
+-- |
+-- | Should be called on pointer move events when pointer is down.
+applyBrushDragFromPointer 
+  :: Number          -- ^ Current X
+  -> Number          -- ^ Current Y
+  -> Number          -- ^ Pressure (0-1)
+  -> AppState 
+  -> AppState
+applyBrushDragFromPointer cx cy pressure s =
+  if s.pointerDown
+    then
+      let
+        -- Create brush drag from movement
+        brushDrag = Paint.mkBrushDrag 
+          cx cy 
+          s.lastPointerX s.lastPointerY
+          (s.brush.size * 1.5)  -- Influence radius slightly larger than brush
+          pressure
+        
+        -- Apply drag to paint system
+        withDrag = Paint.applyBrushDrag brushDrag s.paint
+      in
+        s { paint = withDrag
+          , lastPointerX = cx
+          , lastPointerY = cy
+          }
+    else
+      s { lastPointerX = cx, lastPointerY = cy }
+
+-- | Set pointer down state and initial position.
+setPointerDown :: Number -> Number -> AppState -> AppState
+setPointerDown x y s = 
+  s { pointerDown = true
+    , lastPointerX = x
+    , lastPointerY = y
+    }
+
+-- | Set pointer up state.
+setPointerUp :: AppState -> AppState
+setPointerUp s = s { pointerDown = false }
 
 -- | Run one simulation step.
 simulatePaint :: Number -> AppState -> AppState

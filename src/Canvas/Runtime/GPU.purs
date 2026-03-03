@@ -65,6 +65,8 @@ import Prelude
   , pure
   , ($)
   , (*)
+  , (-)
+  , (<)
   , (<>)
   )
 
@@ -82,7 +84,7 @@ import Hydrogen.GPU.DrawCommand.Types
   , PickId
   )
 import Hydrogen.GPU.Coordinates as Coord
-import Hydrogen.GPU.Coordinates (depthValueMid)
+import Hydrogen.GPU.Coordinates (depthValue)
 import Hydrogen.Schema.Color.RGB as RGB
 import Hydrogen.Schema.Dimension.Device as Device
 
@@ -194,22 +196,36 @@ particlesToCommands :: forall msg. Array Paint.Particle -> Array (DrawCommand ms
 particlesToCommands particles = map particleToCommand particles
 
 -- | Convert a single paint particle to a DrawCommand.
+-- |
+-- | Uses particle height for z-ordering (impasto effect).
+-- | Height 0.0 maps to depth 0.5 (middle), height 1.0+ maps toward 0.0 (near/top).
+-- | This ensures thicker paint renders on top of thinner paint.
 particleToCommand :: forall msg. Paint.Particle -> DrawCommand msg
 particleToCommand p =
   let
     pos = Paint.particlePosition p
     radius = Paint.particleRadius p
     color = Paint.particleColor p
+    height = Paint.particleHeight p
     
     -- Convert Canvas.Types.Color (0-1 floats) to RGB.RGBA (0-255 ints)
     rgbaColor = colorToRGBA color
+    
+    -- Map height to depth value for impasto z-ordering:
+    -- - height 0.0 -> depth 0.5 (middle, flat paint)
+    -- - height 1.0 -> depth 0.25 (nearer, raised paint)
+    -- - height 2.0+ -> depth 0.0 (nearest, thick impasto)
+    -- Lower depth values render on top (near plane).
+    -- Clamp height contribution to avoid going negative.
+    depthFromHeight = 0.5 - (height * 0.25)
+    clampedDepth = if depthFromHeight < 0.0 then 0.0 else depthFromHeight
     
     -- Convert to DrawParticle params
     params :: ParticleParams msg
     params =
       { x: Coord.screenX pos.x
       , y: Coord.screenY pos.y
-      , z: depthValueMid  -- Default depth (middle of depth buffer)
+      , z: depthValue clampedDepth  -- Height-based depth for impasto
       , size: Device.px radius
       , color: rgbaColor
       , pickId: Nothing :: Maybe PickId

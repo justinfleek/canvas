@@ -30,5 +30,4 @@ workspace:
     registry: 73.2.0
   extraPackages:
     hydrogen:
-      git: https://github.com/justinfleek/hydrogen.git
-      ref: jpyxal-0x02
+      path: ../hydrogen

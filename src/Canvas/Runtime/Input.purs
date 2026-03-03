@@ -93,6 +93,7 @@ import Prelude
   , bind
   , discard
   , map
+  , otherwise
   , pure
   , show
   , unit
@@ -107,6 +108,9 @@ import Prelude
   , (==)
   , (>)
   , (>=)
+  , (&&)
+  , (||)
+  , (/=)
   , max
   , min
   )

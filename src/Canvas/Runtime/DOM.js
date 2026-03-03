@@ -288,6 +288,84 @@ export const addDeviceOrientationListenerImpl = (callback) => () => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//                                        // browser boundary // pointer events
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// PointerEvent provides unified input for mouse, touch, and stylus with full
+// pressure/tilt data. This is the preferred API for professional art tools.
+
+// Extract full pointer input data from PointerEvent
+const extractPointerInput = (e, rect) => ({
+  pointerId: e.pointerId,
+  pointerType: e.pointerType,  // "mouse" | "pen" | "touch"
+  x: rect ? e.clientX - rect.left : e.clientX,
+  y: rect ? e.clientY - rect.top : e.clientY,
+  pressure: e.pressure,        // 0.0-1.0 (0.5 default for mouse)
+  tiltX: e.tiltX || 0,         // -90 to 90 degrees
+  tiltY: e.tiltY || 0,         // -90 to 90 degrees
+  twist: e.twist || 0,         // 0-359 degrees (barrel rotation)
+  width: e.width || 1,         // Contact geometry
+  height: e.height || 1,
+  isPrimary: e.isPrimary,
+  buttons: e.buttons,
+  clientX: e.clientX,
+  clientY: e.clientY,
+});
+
+// Add pointer down listener to element (stylus/touch/mouse down)
+export const addPointerDownListenerImpl = (el) => (callback) => () => {
+  const handler = (e) => {
+    const rect = el.getBoundingClientRect();
+    callback(extractPointerInput(e, rect))();
+  };
+  el.addEventListener("pointerdown", handler);
+  return () => el.removeEventListener("pointerdown", handler);
+};
+
+// Add pointer move listener to element (stylus/touch/mouse move)
+export const addPointerMoveListenerImpl = (el) => (callback) => () => {
+  const handler = (e) => {
+    const rect = el.getBoundingClientRect();
+    callback(extractPointerInput(e, rect))();
+  };
+  el.addEventListener("pointermove", handler);
+  return () => el.removeEventListener("pointermove", handler);
+};
+
+// Add pointer up listener to window (stylus/touch/mouse up)
+export const addPointerUpListenerImpl = (callback) => () => {
+  const handler = (e) => {
+    callback(extractPointerInput(e, null))();
+  };
+  window.addEventListener("pointerup", handler);
+  return () => window.removeEventListener("pointerup", handler);
+};
+
+// Add pointer cancel listener to window (interrupted input)
+export const addPointerCancelListenerImpl = (callback) => () => {
+  const handler = (e) => {
+    callback(extractPointerInput(e, null))();
+  };
+  window.addEventListener("pointercancel", handler);
+  return () => window.removeEventListener("pointercancel", handler);
+};
+
+// Coalesce pointer events for high-frequency stylus input
+// Returns array of all coalesced events since last frame
+export const addCoalescedPointerMoveListenerImpl = (el) => (callback) => () => {
+  const handler = (e) => {
+    const rect = el.getBoundingClientRect();
+    // getCoalescedEvents() returns all events since last frame
+    // This is crucial for smooth stylus input at high sample rates
+    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    const inputs = events.map((ev) => extractPointerInput(ev, rect));
+    callback(inputs)();
+  };
+  el.addEventListener("pointermove", handler);
+  return () => el.removeEventListener("pointermove", handler);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //                                               // browser boundary // ref system
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -322,4 +400,12 @@ export const unsafeCoerceTick = (deltaTime) => {
   // Return an object that matches the Tick constructor structure
   // PureScript ADTs are represented as { tag: "ConstructorName", _1: arg1, ... }
   return { tag: "Tick", _1: deltaTime };
+};
+
+// Set GPU backend status text in the UI
+export const setGPUStatusTextImpl = (text) => () => {
+  const el = document.getElementById("gpu-backend");
+  if (el) {
+    el.textContent = text;
+  }
 };

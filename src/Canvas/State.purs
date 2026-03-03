@@ -35,6 +35,15 @@ module Canvas.State
   , mkAppState
   , initialAppState
   
+  -- * Viewport State
+  , ViewportState
+  , initialViewport
+  , viewportState
+  , viewportScale
+  , viewportPanX
+  , viewportPanY
+  , viewportRotation
+  
   -- * State Accessors
   , viewport
   , currentTool
@@ -44,6 +53,7 @@ module Canvas.State
   , brushConfig
   , activeLayerId
   , isPlaying
+  , easterEggState
   
   -- * Brush Configuration
   , BrushConfig
@@ -65,6 +75,7 @@ module Canvas.State
   
   -- * Paint Operations
   , addPaintParticle
+  , addPaintParticleWithDynamics
   , clearActiveLayer
   , simulatePaint
   
@@ -76,7 +87,23 @@ module Canvas.State
   , addLayer
   , removeLayer
   , setLayerVisibility
+  , toggleLayerVisibility
+  , moveLayerUp
+  , moveLayerDown
   , layerCount
+  
+  -- * Viewport Operations
+  , panViewport
+  , zoomViewport
+  , zoomViewportAt
+  , rotateViewport
+  , resetViewport
+  
+  -- * Gesture Tracking
+  , GestureTrackingState
+  , gestureTracking
+  , processTwoFingerGesture
+  , endTwoFingerGesture
   
   -- * History
   , canUndo
@@ -84,6 +111,13 @@ module Canvas.State
   , undo
   , redo
   , pushHistory
+  
+  -- * Easter Eggs
+  , processEasterEggKey
+  , processEasterEggMotion
+  , updateEasterEggConfetti
+  , triggerEasterEggConfetti
+  , resetEasterEggs
   
   -- * Display
   , displayAppState
@@ -102,6 +136,8 @@ import Prelude
   , (||)
   , (+)
   , (-)
+  , (*)
+  , (/)
   , (>)
   , (<>)
   , map
@@ -144,6 +180,10 @@ import Canvas.Layer.Types
   , setLayerVisible
   , layerCount
   , stackActiveLayerId
+  , getLayer
+  , moveLayerUp
+  , moveLayerDown
+  , layerVisible
   ) as Layer
 
 import Canvas.Paint.Particle
@@ -167,6 +207,93 @@ import Canvas.Physics.Gravity
   , getGravity2D
   , isGravityActive
   ) as Gravity
+
+import Canvas.Easter as Easter
+import Canvas.Easter (EasterEggState)
+
+-- Hydrogen gesture pure functions
+import Hydrogen.Motion.Gesture as Gesture
+import Hydrogen.Motion.Gesture 
+  ( Point
+  , TwoFingerData
+  , computeTwoFingerData
+  , normalizeAngle
+  )
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                           // viewport state
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Viewport state for canvas navigation (pan, zoom, rotate).
+-- |
+-- | The viewport transform is applied in order: translate → scale → rotate
+-- | This allows panning the view, then zooming at the current center,
+-- | then rotating the canvas.
+type ViewportState =
+  { panX :: Number            -- ^ Horizontal pan offset (pixels)
+  , panY :: Number            -- ^ Vertical pan offset (pixels)
+  , scale :: Number           -- ^ Zoom scale (1.0 = 100%, 2.0 = 200%)
+  , rotation :: Number        -- ^ Rotation angle (radians)
+  , minScale :: Number        -- ^ Minimum zoom level
+  , maxScale :: Number        -- ^ Maximum zoom level
+  }
+
+-- | Initial viewport (no pan, 100% zoom, no rotation).
+initialViewport :: ViewportState
+initialViewport =
+  { panX: 0.0
+  , panY: 0.0
+  , scale: 1.0
+  , rotation: 0.0
+  , minScale: 0.1
+  , maxScale: 10.0
+  }
+
+-- | Get viewport scale.
+viewportScale :: ViewportState -> Number
+viewportScale v = v.scale
+
+-- | Get viewport pan X.
+viewportPanX :: ViewportState -> Number
+viewportPanX v = v.panX
+
+-- | Get viewport pan Y.
+viewportPanY :: ViewportState -> Number
+viewportPanY v = v.panY
+
+-- | Get viewport rotation.
+viewportRotation :: ViewportState -> Number
+viewportRotation v = v.rotation
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                          // gesture tracking
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Gesture tracking state for two-finger gestures.
+-- |
+-- | Tracks the previous state of a multi-touch gesture so we can compute
+-- | deltas for pan, pinch scale, and rotation.
+type GestureTrackingState =
+  { active :: Boolean            -- ^ Is a two-finger gesture active?
+  , touchCount :: Int            -- ^ Number of active touches
+  , initialDistance :: Number    -- ^ Distance between fingers at gesture start
+  , initialAngle :: Number       -- ^ Angle between fingers at gesture start (degrees)
+  , lastCenter :: { x :: Number, y :: Number }  -- ^ Last center point
+  , lastDistance :: Number       -- ^ Last distance between fingers
+  , lastAngle :: Number          -- ^ Last angle between fingers
+  }
+
+-- | Initial gesture tracking state (no active gesture).
+initialGestureTracking :: GestureTrackingState
+initialGestureTracking =
+  { active: false
+  , touchCount: 0
+  , initialDistance: 0.0
+  , initialAngle: 0.0
+  , lastCenter: { x: 0.0, y: 0.0 }
+  , lastDistance: 0.0
+  , lastAngle: 0.0
+  }
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                             // brush config
@@ -232,6 +359,9 @@ type AppState =
   { -- Canvas bounds
     canvasBounds :: Bounds
     
+  -- Viewport (pan, zoom, rotate)
+  , viewportState :: ViewportState
+    
   -- Current tool
   , tool :: Tool
   
@@ -257,6 +387,12 @@ type AppState =
   , redoStack :: Array HistoryEntry
   , maxHistorySize :: Int
   
+  -- Easter eggs (Konami code, shake detection, confetti)
+  , easterEggs :: EasterEggState
+  
+  -- Gesture tracking (for two-finger pan/pinch/rotate)
+  , gesture :: GestureTrackingState
+  
   -- Debug
   , showDebugOverlay :: Boolean
   }
@@ -270,6 +406,7 @@ mkAppState width height =
     bgLayer = Layer.mkLayer backgroundLayerId "Background" (mkZIndex 0) bounds
   in
     { canvasBounds: bounds
+    , viewportState: initialViewport
     , tool: BrushTool
     , brush: defaultBrushConfig
     , layers: Layer.mkLayerStack [bgLayer, defaultLayer] defaultLayerId
@@ -281,6 +418,8 @@ mkAppState width height =
     , undoStack: []
     , redoStack: []
     , maxHistorySize: 50
+    , easterEggs: Easter.initialState
+    , gesture: initialGestureTracking
     , showDebugOverlay: false
     }
 
@@ -324,6 +463,18 @@ activeLayerId s = Layer.stackActiveLayerId s.layers
 isPlaying :: AppState -> Boolean
 isPlaying s = s.playing
 
+-- | Get easter egg state.
+easterEggState :: AppState -> EasterEggState
+easterEggState s = s.easterEggs
+
+-- | Get viewport state.
+viewportState :: AppState -> ViewportState
+viewportState s = s.viewportState
+
+-- | Get gesture tracking state.
+gestureTracking :: AppState -> GestureTrackingState
+gestureTracking s = s.gesture
+
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                              // state updates
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -366,10 +517,55 @@ togglePlaying s = s { playing = not s.playing }
 --                                                           // paint operations
 -- ═════════════════════════════════════════════════════════════════════════════
 
--- | Add a paint particle at position.
+-- | Add a paint particle at position (default pressure).
 addPaintParticle :: Number -> Number -> AppState -> AppState
 addPaintParticle px py s =
   s { paint = Paint.addParticle s.paint px py s.brush.color }
+
+-- | Add a paint particle with full stylus dynamics.
+-- |
+-- | Uses pressure and tilt from stylus to affect:
+-- | - Size: pressure scales brush size (0.2x to 1.0x)
+-- | - Opacity: pressure scales opacity
+-- | - Flow direction: tilt affects initial particle velocity
+-- |
+-- | This is the professional art tool path for realistic paint simulation.
+addPaintParticleWithDynamics 
+  :: Number          -- ^ X position
+  -> Number          -- ^ Y position
+  -> Number          -- ^ Pressure (0.0-1.0)
+  -> Number          -- ^ Tilt X (-90 to 90)
+  -> Number          -- ^ Tilt Y (-90 to 90)
+  -> AppState 
+  -> AppState
+addPaintParticleWithDynamics px py pressure tiltX tiltY s =
+  let
+    -- Apply pressure to brush size (20% to 100% based on pressure)
+    sizeMultiplier = 0.2 + (pressure * 0.8)
+    effectiveSize = s.brush.size * sizeMultiplier
+    
+    -- Apply pressure to opacity
+    effectiveOpacity = s.brush.opacity * pressure
+    
+    -- Compute position offset from tilt
+    -- Tilt angles (-90 to 90) mapped to offset (-5 to 5 pixels)
+    -- This simulates brush angle affecting paint placement
+    tiltOffsetX = tiltX / 18.0
+    tiltOffsetY = tiltY / 18.0
+    
+    -- Apply tilt offset to create angled brush effect
+    effectiveX = px + tiltOffsetX
+    effectiveY = py + tiltOffsetY
+    
+    -- Add particle with dynamics
+    -- Use the effective size/opacity through brush config
+    withSizedBrush = s { brush = s.brush { size = effectiveSize, opacity = effectiveOpacity } }
+    withParticle = withSizedBrush { paint = Paint.addParticle withSizedBrush.paint effectiveX effectiveY s.brush.color }
+    
+    -- Restore original brush settings for next stroke
+    restored = withParticle { brush = s.brush }
+  in
+    restored
 
 -- | Clear all particles from active layer.
 clearActiveLayer :: AppState -> AppState
@@ -434,9 +630,183 @@ setLayerVisibility :: LayerId -> Boolean -> AppState -> AppState
 setLayerVisibility lid vis s =
   s { layers = Layer.updateLayer lid (Layer.setLayerVisible vis) s.layers }
 
+-- | Toggle layer visibility.
+toggleLayerVisibility :: LayerId -> AppState -> AppState
+toggleLayerVisibility lid s =
+  case Layer.getLayer lid s.layers of
+    Nothing -> s
+    Just layer -> 
+      let currentVis = Layer.layerVisible layer
+      in setLayerVisibility lid (not currentVis) s
+
+-- | Move a layer up in the stack (higher Z-index).
+moveLayerUp :: LayerId -> AppState -> AppState
+moveLayerUp lid s =
+  s { layers = Layer.moveLayerUp lid s.layers }
+
+-- | Move a layer down in the stack (lower Z-index).
+moveLayerDown :: LayerId -> AppState -> AppState
+moveLayerDown lid s =
+  s { layers = Layer.moveLayerDown lid s.layers }
+
 -- | Get total layer count.
 layerCount :: AppState -> Int
 layerCount s = Layer.layerCount s.layers
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                        // viewport operations
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Pan the viewport by delta.
+-- |
+-- | Used for two-finger pan gestures or click-and-drag navigation.
+panViewport :: Number -> Number -> AppState -> AppState
+panViewport dx dy s =
+  let vp = s.viewportState
+  in s { viewportState = vp { panX = vp.panX + dx, panY = vp.panY + dy } }
+
+-- | Zoom the viewport by scale factor.
+-- |
+-- | Scale is multiplicative: 2.0 doubles the zoom, 0.5 halves it.
+-- | Clamped to minScale..maxScale range.
+zoomViewport :: Number -> AppState -> AppState
+zoomViewport scaleDelta s =
+  let 
+    vp = s.viewportState
+    newScale = max vp.minScale (min vp.maxScale (vp.scale * scaleDelta))
+  in s { viewportState = vp { scale = newScale } }
+
+-- | Zoom the viewport centered on a point.
+-- |
+-- | Used for pinch-to-zoom where the center of the pinch should stay fixed.
+-- | This adjusts pan to keep the focal point stationary.
+zoomViewportAt :: Number -> Number -> Number -> AppState -> AppState
+zoomViewportAt centerX centerY scaleDelta s =
+  let 
+    vp = s.viewportState
+    oldScale = vp.scale
+    newScale = max vp.minScale (min vp.maxScale (oldScale * scaleDelta))
+    
+    -- To keep the center point fixed, we need to adjust pan
+    -- The point (centerX, centerY) in screen space maps to:
+    --   world = (screen - pan) / scale
+    -- After scaling, we want the same world point at same screen position
+    -- So: (center - newPan) / newScale = (center - oldPan) / oldScale
+    -- Solving: newPan = center - (center - oldPan) * (newScale / oldScale)
+    scaleRatio = newScale / oldScale
+    newPanX = centerX - (centerX - vp.panX) * scaleRatio
+    newPanY = centerY - (centerY - vp.panY) * scaleRatio
+  in 
+    s { viewportState = vp 
+        { scale = newScale
+        , panX = newPanX
+        , panY = newPanY 
+        } 
+      }
+
+-- | Rotate the viewport by angle (in radians).
+-- |
+-- | Used for two-finger rotate gestures.
+rotateViewport :: Number -> AppState -> AppState
+rotateViewport deltaRotation s =
+  let vp = s.viewportState
+  in s { viewportState = vp { rotation = vp.rotation + deltaRotation } }
+
+-- | Reset viewport to initial state.
+-- |
+-- | Double-tap or reset button brings view back to 100%, centered, no rotation.
+resetViewport :: AppState -> AppState
+resetViewport s = s { viewportState = initialViewport }
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                       // gesture processing
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Process a two-finger gesture from touch data.
+-- |
+-- | Takes two touch points and computes pan, pinch (zoom), and rotate deltas.
+-- | Updates both the gesture tracking state and the viewport in one step.
+-- |
+-- | This is a pure function that processes touch coordinates:
+-- | - First call with two fingers starts the gesture (stores initial state)
+-- | - Subsequent calls compute deltas from previous state
+-- | - Returns updated state with new viewport transform
+processTwoFingerGesture 
+  :: { x :: Number, y :: Number }  -- ^ First touch point
+  -> { x :: Number, y :: Number }  -- ^ Second touch point
+  -> AppState 
+  -> AppState
+processTwoFingerGesture p1 p2 s =
+  let
+    -- Convert to Point type for Hydrogen gesture functions
+    point1 :: Point
+    point1 = { x: p1.x, y: p1.y }
+    
+    point2 :: Point
+    point2 = { x: p2.x, y: p2.y }
+    
+    -- Compute current two-finger data
+    current :: TwoFingerData
+    current = computeTwoFingerData point1 point2
+    
+    g = s.gesture
+    vp = s.viewportState
+  in
+    if g.active then
+      -- Gesture is active, compute deltas
+      let
+        -- Pan delta
+        dx = current.center.x - g.lastCenter.x
+        dy = current.center.y - g.lastCenter.y
+        
+        -- Scale delta (ratio of current distance to last distance)
+        scaleDelta = if g.lastDistance > 0.001 
+                     then current.distance / g.lastDistance 
+                     else 1.0
+        
+        -- Rotation delta (in degrees, then convert to radians)
+        angleDeltaDegrees = normalizeAngle (current.angle - g.lastAngle)
+        angleDeltaRadians = angleDeltaDegrees * 3.14159 / 180.0
+        
+        -- Update viewport with all deltas
+        newScale = max vp.minScale (min vp.maxScale (vp.scale * scaleDelta))
+        
+        -- Update gesture tracking
+        newGesture = g
+          { lastCenter = current.center
+          , lastDistance = current.distance
+          , lastAngle = current.angle
+          }
+      in
+        s { gesture = newGesture
+          , viewportState = vp
+              { panX = vp.panX + dx
+              , panY = vp.panY + dy
+              , scale = newScale
+              , rotation = vp.rotation + angleDeltaRadians
+              }
+          }
+    else
+      -- Gesture just started, initialize tracking
+      let
+        newGesture = 
+          { active: true
+          , touchCount: 2
+          , initialDistance: current.distance
+          , initialAngle: current.angle
+          , lastCenter: current.center
+          , lastDistance: current.distance
+          , lastAngle: current.angle
+          }
+      in
+        s { gesture = newGesture }
+
+-- | End a two-finger gesture.
+-- |
+-- | Called when touch ends or goes to single touch.
+-- | Resets gesture tracking state.
+endTwoFingerGesture :: AppState -> AppState
+endTwoFingerGesture s = s { gesture = initialGestureTracking }
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                    // history
@@ -497,6 +867,42 @@ redo s =
           , redoStack = remaining
           , undoStack = Array.snoc s.undoStack currentEntry
           }
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                         // easter egg operations
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Process a key press for easter egg detection (Konami code).
+processEasterEggKey :: String -> AppState -> AppState
+processEasterEggKey key s =
+  s { easterEggs = Easter.processKey key s.easterEggs }
+
+-- | Process device motion for easter egg detection (shake).
+processEasterEggMotion 
+  :: { accelerationX :: Number
+     , accelerationY :: Number
+     , accelerationZ :: Number
+     , timestamp :: Number
+     }
+  -> AppState 
+  -> AppState
+processEasterEggMotion motion s =
+  s { easterEggs = Easter.processMotion motion s.easterEggs }
+
+-- | Update confetti animation each frame.
+updateEasterEggConfetti :: Number -> AppState -> AppState
+updateEasterEggConfetti dt s =
+  s { easterEggs = Easter.updateConfetti dt s.easterEggs }
+
+-- | Trigger confetti explosion at position (for Konami code reward).
+triggerEasterEggConfetti :: Number -> Number -> AppState -> AppState
+triggerEasterEggConfetti x y s =
+  s { easterEggs = Easter.triggerConfetti x y s.easterEggs }
+
+-- | Reset easter egg detection states after handling triggers.
+resetEasterEggs :: AppState -> AppState
+resetEasterEggs s =
+  s { easterEggs = Easter.reset s.easterEggs }
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                    // display

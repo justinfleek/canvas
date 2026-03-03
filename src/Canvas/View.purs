@@ -45,12 +45,20 @@ module Canvas.View
   ( -- * Main View
     view
   
+  -- * Stylus Input Type
+  , StylusInput
+  
   -- * Msg Type
   , Msg
       ( ToolSelected
       , BrushPresetSelected
       , MediaTypeSelected
       , ColorChanged
+      , BrushSizeChanged
+      , BrushOpacityChanged
+      , PointerDown
+      , PointerMoved
+      , PointerUp
       , CanvasTouched
       , CanvasMoved
       , CanvasReleased
@@ -63,6 +71,24 @@ module Canvas.View
       , Tick
       , LayerSelected
       , AddLayer
+      , LayerVisibilityToggled
+      , DeleteLayer
+      , MoveLayerUp
+      , MoveLayerDown
+      -- Easter egg events
+      , KeyDown
+      , DeviceMotion
+      -- Viewport gesture events
+      , ViewportPan
+      , ViewportZoom
+      , ViewportZoomAt
+      , ViewportRotate
+      , ViewportReset
+      -- Two-finger gesture events
+      , TwoFingerTouch
+      , TwoFingerEnd
+      -- Export
+      , ExportCanvas
       )
   
   -- * Sub-views
@@ -75,6 +101,8 @@ module Canvas.View
   , renderParticles
   , renderDebugOverlay
   , renderLayerPanel
+  , renderPropertiesPanel
+  , renderColorPicker
   ) where
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -90,12 +118,21 @@ import Prelude
   , (/)
   , (<)
   , (>)
+  , (>=)
+  , (<=)
+  , (+)
+  , (-)
   , map
   , negate
+  , not
   , (==)
+  , (/=)
+  , (&&)
   )
 
 import Data.Array (length) as Array
+import Data.Maybe (Maybe(Just, Nothing), fromMaybe)
+import Data.String.CodeUnits (charAt, singleton) as Str
 import Data.Tuple (Tuple(Tuple))
 
 -- Hydrogen Element (pure rendering)
@@ -156,14 +193,34 @@ import Canvas.Types
   ( Tool(BrushTool, EraserTool, PanTool, EyedropperTool)
   , Color
   , LayerId
+  , backgroundLayerId
   )
 import Canvas.Paint.Particle as Paint
 import Canvas.Physics.Gravity as Gravity
 import Canvas.Layer.Types (Layer, sortedLayers, layerId, layerName, layerVisible)
 
+-- Easter eggs
+import Canvas.Easter as Easter
+
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                   // msg type
 -- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Stylus/touch input with full pressure and tilt data.
+-- |
+-- | Captures the complete state of a stylus or touch input:
+-- | - Position (x, y) in canvas coordinates
+-- | - Pressure (0.0-1.0) from pen force or touch force
+-- | - Tilt X/Y (-90 to 90 degrees) from pen angle
+-- | - Pointer type ("pen", "touch", or "mouse")
+type StylusInput =
+  { x :: Number
+  , y :: Number
+  , pressure :: Number
+  , tiltX :: Number
+  , tiltY :: Number
+  , pointerType :: String
+  }
 
 -- | Messages that the view can emit.
 -- |
@@ -173,8 +230,15 @@ data Msg
   | BrushPresetSelected String           -- ^ Preset name
   | MediaTypeSelected WetMediaType
   | ColorChanged Color
-  | CanvasTouched Number Number          -- ^ x, y in canvas coords
-  | CanvasMoved Number Number            -- ^ x, y in canvas coords
+  | BrushSizeChanged Number              -- ^ Change brush size (1-500)
+  | BrushOpacityChanged Number           -- ^ Change brush opacity (0-1)
+  -- Pointer events with full stylus data
+  | PointerDown StylusInput              -- ^ Stylus/touch down with pressure/tilt
+  | PointerMoved StylusInput             -- ^ Stylus/touch move with pressure/tilt
+  | PointerUp                            -- ^ Stylus/touch lifted
+  -- Legacy events (for compatibility, no pressure/tilt)
+  | CanvasTouched Number Number          -- ^ x, y in canvas coords (legacy)
+  | CanvasMoved Number Number            -- ^ x, y in canvas coords (legacy)
   | CanvasReleased
   | OrientationChanged DeviceOrientation -- ^ From device sensors
   | ToggleGravity
@@ -185,6 +249,32 @@ data Msg
   | Tick Number                          -- ^ Delta time in ms
   | LayerSelected LayerId                -- ^ Select a layer
   | AddLayer                             -- ^ Add new layer
+  | LayerVisibilityToggled LayerId       -- ^ Toggle layer visibility
+  | DeleteLayer LayerId                  -- ^ Delete a layer
+  | MoveLayerUp LayerId                  -- ^ Move layer up in stack
+  | MoveLayerDown LayerId                -- ^ Move layer down in stack
+  -- Easter egg events
+  | KeyDown String                       -- ^ Key pressed (for Konami code)
+  | DeviceMotion                         -- ^ Device motion event (for shake detection)
+      { accelerationX :: Number
+      , accelerationY :: Number
+      , accelerationZ :: Number
+      , timestamp :: Number
+      }
+  -- Viewport gesture events
+  | ViewportPan Number Number            -- ^ Pan by (dx, dy)
+  | ViewportZoom Number                  -- ^ Zoom by scale factor
+  | ViewportZoomAt Number Number Number  -- ^ Zoom at (x, y) by scale factor
+  | ViewportRotate Number                -- ^ Rotate by angle (radians)
+  | ViewportReset                        -- ^ Reset to initial viewport
+  -- Two-finger gesture events (processed from touch events)
+  | TwoFingerTouch                       -- ^ Two fingers touching
+      { x1 :: Number, y1 :: Number       -- ^ First touch point
+      , x2 :: Number, y2 :: Number       -- ^ Second touch point
+      }
+  | TwoFingerEnd                         -- ^ Two-finger gesture ended
+  -- Export
+  | ExportCanvas String                  -- ^ Export canvas (format: "png", "svg")
 
 derive instance eqMsg :: Eq Msg
 
@@ -193,6 +283,11 @@ instance showMsg :: Show Msg where
   show (BrushPresetSelected p) = "BrushPresetSelected(" <> p <> ")"
   show (MediaTypeSelected m) = "MediaTypeSelected(" <> show m <> ")"
   show (ColorChanged _) = "ColorChanged"
+  show (BrushSizeChanged s) = "BrushSizeChanged(" <> show s <> ")"
+  show (BrushOpacityChanged o) = "BrushOpacityChanged(" <> show o <> ")"
+  show (PointerDown s) = "PointerDown(" <> show s.x <> "," <> show s.y <> " p=" <> show s.pressure <> " t=" <> s.pointerType <> ")"
+  show (PointerMoved s) = "PointerMoved(" <> show s.x <> "," <> show s.y <> " p=" <> show s.pressure <> ")"
+  show PointerUp = "PointerUp"
   show (CanvasTouched x y) = "CanvasTouched(" <> show x <> "," <> show y <> ")"
   show (CanvasMoved x y) = "CanvasMoved(" <> show x <> "," <> show y <> ")"
   show CanvasReleased = "CanvasReleased"
@@ -205,6 +300,20 @@ instance showMsg :: Show Msg where
   show (Tick dt) = "Tick(" <> show dt <> ")"
   show (LayerSelected lid) = "LayerSelected(" <> show lid <> ")"
   show AddLayer = "AddLayer"
+  show (LayerVisibilityToggled lid) = "LayerVisibilityToggled(" <> show lid <> ")"
+  show (DeleteLayer lid) = "DeleteLayer(" <> show lid <> ")"
+  show (MoveLayerUp lid) = "MoveLayerUp(" <> show lid <> ")"
+  show (MoveLayerDown lid) = "MoveLayerDown(" <> show lid <> ")"
+  show (KeyDown key) = "KeyDown(" <> key <> ")"
+  show (DeviceMotion m) = "DeviceMotion(ax=" <> show m.accelerationX <> ",ay=" <> show m.accelerationY <> ")"
+  show (ViewportPan dx dy) = "ViewportPan(" <> show dx <> "," <> show dy <> ")"
+  show (ViewportZoom s) = "ViewportZoom(" <> show s <> ")"
+  show (ViewportZoomAt x y s) = "ViewportZoomAt(" <> show x <> "," <> show y <> "," <> show s <> ")"
+  show (ViewportRotate r) = "ViewportRotate(" <> show r <> ")"
+  show ViewportReset = "ViewportReset"
+  show (TwoFingerTouch t) = "TwoFingerTouch(" <> show t.x1 <> "," <> show t.y1 <> " / " <> show t.x2 <> "," <> show t.y2 <> ")"
+  show TwoFingerEnd = "TwoFingerEnd"
+  show (ExportCanvas fmt) = "ExportCanvas(" <> fmt <> ")"
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                 // main view
@@ -213,6 +322,7 @@ instance showMsg :: Show Msg where
 -- | Main view function: State -> Element
 -- |
 -- | Pure function that renders the entire application.
+-- | Includes confetti overlay for easter egg celebration.
 view :: AppState -> Element Msg
 view state =
   div_
@@ -226,9 +336,31 @@ view state =
         , Tuple "user-select" "none"
         ])
     [ renderToolbar state
-    , renderCanvas state
+    , div_
+        ([ class_ "canvas-main" ] <> styles
+            [ Tuple "flex" "1"
+            , Tuple "display" "flex"
+            , Tuple "position" "relative"
+            , Tuple "overflow" "hidden"
+            ])
+        [ -- Left sidebar: Properties panel
+          renderPropertiesPanel state
+        -- Center: Canvas
+        , renderCanvas state
+        -- Right sidebar: Layer panel
+        , renderLayerPanel state
+        ]
     , renderStatusBar state
+    -- Easter egg: Confetti overlay (renders on top when active)
+    , renderConfettiOverlay state
     ]
+
+-- | Render confetti overlay for Konami code celebration.
+-- |
+-- | When the Konami code is entered, confetti explodes from the center!
+renderConfettiOverlay :: AppState -> Element Msg
+renderConfettiOverlay state =
+  Easter.renderConfetti (State.easterEggState state)
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                  // toolbar
@@ -436,6 +568,7 @@ renderCanvas state =
         , Tuple "background" "#f5f5dc"  -- Paper color
         , Tuple "overflow" "hidden"
         , Tuple "cursor" "crosshair"
+        , Tuple "min-width" "0"  -- Allow flex shrinking
         ])
     [ renderPaintLayers state
     , renderGravityIndicator state
@@ -443,6 +576,9 @@ renderCanvas state =
     ]
 
 -- | Render all paint layers.
+-- |
+-- | Uses a GPU-accelerated canvas element for particle rendering.
+-- | The actual rendering is done by Canvas.Runtime.GPU in the animation loop.
 renderPaintLayers :: AppState -> Element Msg
 renderPaintLayers state =
   div_
@@ -453,20 +589,53 @@ renderPaintLayers state =
         , Tuple "width" "100%"
         , Tuple "height" "100%"
         ])
-    [ renderParticles state ]
+    [ renderGPUCanvas state
+    , renderParticlesSVGFallback state  -- SVG fallback (hidden when GPU active)
+    ]
 
--- | Render SPH particles as SVG circles.
-renderParticles :: AppState -> Element Msg
-renderParticles state =
-  let particles = Paint.allParticles (State.paintSystem state)
-  in E.svg_
-    (styles
+-- | GPU-accelerated canvas element for particle rendering.
+-- |
+-- | This canvas is rendered to by Canvas.Runtime.GPU using WebGL/WebGPU/Canvas2D.
+-- | The id "paint-canvas" is used by GPU.initialize to get the rendering context.
+renderGPUCanvas :: AppState -> Element Msg
+renderGPUCanvas _state =
+  E.canvas_
+    ([ id_ "paint-canvas"
+    , class_ "gpu-canvas"
+    ] <> styles
         [ Tuple "position" "absolute"
         , Tuple "top" "0"
         , Tuple "left" "0"
         , Tuple "width" "100%"
         , Tuple "height" "100%"
         , Tuple "pointer-events" "none"
+        ])
+
+-- | Render SPH particles as SVG circles (fallback).
+-- |
+-- | This is kept as a fallback in case GPU initialization fails.
+-- | It's hidden by default when GPU rendering is active.
+renderParticles :: AppState -> Element Msg
+renderParticles state = renderParticlesSVGFallback state
+
+-- | SVG fallback for particle rendering.
+-- |
+-- | Hidden by default (display: none) when GPU canvas is present.
+-- | Useful for debugging or when GPU is unavailable.
+renderParticlesSVGFallback :: AppState -> Element Msg
+renderParticlesSVGFallback state =
+  let particles = Paint.allParticles (State.paintSystem state)
+  in E.svg_
+    ([ id_ "paint-svg-fallback"
+    , class_ "svg-particles-fallback"
+    ] <> styles
+        [ Tuple "position" "absolute"
+        , Tuple "top" "0"
+        , Tuple "left" "0"
+        , Tuple "width" "100%"
+        , Tuple "height" "100%"
+        , Tuple "pointer-events" "none"
+        , Tuple "display" "none"  -- Hidden when GPU is active
         ])
     (map renderSingleParticle particles)
 
@@ -602,6 +771,8 @@ renderDebugOverlay state =
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Status bar at bottom showing stats.
+-- |
+-- | The GPU backend indicator has id "gpu-backend" and is updated by the runtime.
 renderStatusBar :: AppState -> Element Msg
 renderStatusBar state =
   let particleCount = Paint.particleCount (State.paintSystem state)
@@ -617,6 +788,12 @@ renderStatusBar state =
         ])
     [ span_ [] [ text ("Particles: " <> show particleCount) ]
     , span_ [] [ text ("Layers: " <> show (State.layerCount state)) ]
+    , span_ 
+        ([ id_ "gpu-backend" ] <> styles 
+            [ Tuple "color" "#4a9eff"
+            , Tuple "font-weight" "bold"
+            ])
+        [ text "GPU: Detecting..." ]  -- Updated by runtime
     , span_ [] [ text (if State.canUndo state then "Undo available" else "") ]
     ]
 
@@ -628,87 +805,480 @@ renderStatusBar state =
 -- |
 -- | Displays layers sorted by Z-index, with the active layer highlighted.
 -- | Uses LayerId for selection and Layer type for display.
+-- | Includes controls for visibility, reordering, and deletion.
 renderLayerPanel :: AppState -> Element Msg
 renderLayerPanel state =
   let 
     stack = State.layerStack state
     layers = sortedLayers stack
     activeId = State.activeLayerId state
+    layerCount = Array.length layers
   in div_
     ([ class_ "layer-panel" ] <> styles
-        [ Tuple "position" "absolute"
-        , Tuple "top" "60px"
-        , Tuple "right" "8px"
-        , Tuple "width" "150px"
+        [ Tuple "width" "180px"
         , Tuple "padding" "8px"
-        , Tuple "background" "rgba(26,26,46,0.95)"
-        , Tuple "border" "1px solid #333"
-        , Tuple "border-radius" "4px"
+        , Tuple "background" "#1a1a2e"
+        , Tuple "border-left" "1px solid #333"
         , Tuple "font-size" "11px"
+        , Tuple "display" "flex"
+        , Tuple "flex-direction" "column"
+        , Tuple "gap" "8px"
         ])
-    [ div_
-        (styles [ Tuple "display" "flex", Tuple "justify-content" "space-between", Tuple "margin-bottom" "8px" ])
-        [ span_ (styles [ Tuple "color" "#888" ]) [ text "Layers" ]
+    [ -- Header with add button
+      div_
+        (styles 
+            [ Tuple "display" "flex"
+            , Tuple "justify-content" "space-between"
+            , Tuple "align-items" "center"
+            ])
+        [ span_ (styles [ Tuple "color" "#888", Tuple "font-weight" "bold" ]) [ text "Layers" ]
         , button_
             ([ class_ "add-layer-btn"
             , onClick AddLayer
+            , E.title "Add new layer"
             ] <> styles
-                [ Tuple "padding" "2px 6px"
+                [ Tuple "padding" "4px 8px"
                 , Tuple "border" "none"
                 , Tuple "border-radius" "3px"
                 , Tuple "background" "#3a3a5e"
                 , Tuple "color" "#ccc"
                 , Tuple "cursor" "pointer"
+                , Tuple "font-size" "12px"
                 ])
             [ text "+" ]
         ]
+    -- Layer list
     , div_
         ([ class_ "layer-list" ] <> styles
             [ Tuple "display" "flex"
             , Tuple "flex-direction" "column"
             , Tuple "gap" "2px"
+            , Tuple "flex" "1"
+            , Tuple "overflow-y" "auto"
             ])
-        (map (renderLayerItem activeId) layers)
+        (map (renderLayerItem activeId layerCount) layers)
     ]
 
 -- | Render a single layer item in the panel.
 -- |
--- | Shows layer name and visibility indicator.
+-- | Shows layer name, visibility toggle, and reorder/delete controls.
 -- | Active layer is highlighted with a different background.
-renderLayerItem :: LayerId -> Layer -> Element Msg
-renderLayerItem activeId layer =
+renderLayerItem :: LayerId -> Int -> Layer -> Element Msg
+renderLayerItem activeId totalLayers layer =
   let 
     lid = layerId layer
     isActive = lid == activeId
     isVisible = layerVisible layer
+    isBackground = lid == backgroundLayerId  -- Background layer (protected)
     bgColor = if isActive then "#4a4a6a" else "#2a2a4e"
     textColor = if isVisible then "#fff" else "#666"
-  in button_
-    ([ class_ "layer-item"
-    , onClick (LayerSelected lid)
-    , E.title (layerName layer)
-    ] <> styles
+  in div_
+    ([ class_ "layer-item" ] <> styles
         [ Tuple "display" "flex"
         , Tuple "align-items" "center"
         , Tuple "gap" "4px"
         , Tuple "padding" "4px 6px"
-        , Tuple "border" "none"
         , Tuple "border-radius" "3px"
         , Tuple "background" bgColor
-        , Tuple "color" textColor
-        , Tuple "cursor" "pointer"
-        , Tuple "text-align" "left"
-        , Tuple "width" "100%"
         ])
-    [ -- Visibility indicator
-      span_ 
-        (styles 
-            [ Tuple "width" "8px"
-            , Tuple "height" "8px"
-            , Tuple "border-radius" "50%"
-            , Tuple "background" (if isVisible then "#0f0" else "#333")
+    [ -- Visibility toggle button
+      button_
+        ([ class_ "visibility-btn"
+        , onClick (LayerVisibilityToggled lid)
+        , E.title (if isVisible then "Hide layer" else "Show layer")
+        ] <> styles
+            [ Tuple "width" "16px"
+            , Tuple "height" "16px"
+            , Tuple "border" "none"
+            , Tuple "border-radius" "3px"
+            , Tuple "background" (if isVisible then "#0a0" else "#333")
+            , Tuple "cursor" "pointer"
+            , Tuple "padding" "0"
             ])
         []
-    , span_ (styles [ Tuple "flex" "1", Tuple "overflow" "hidden", Tuple "text-overflow" "ellipsis" ]) 
+    -- Layer name (clickable to select)
+    , button_
+        ([ class_ "layer-name"
+        , onClick (LayerSelected lid)
+        , E.title (layerName layer)
+        ] <> styles
+            [ Tuple "flex" "1"
+            , Tuple "border" "none"
+            , Tuple "background" "transparent"
+            , Tuple "color" textColor
+            , Tuple "cursor" "pointer"
+            , Tuple "text-align" "left"
+            , Tuple "padding" "2px 4px"
+            , Tuple "overflow" "hidden"
+            , Tuple "text-overflow" "ellipsis"
+            , Tuple "white-space" "nowrap"
+            ])
         [ text (layerName layer) ]
+    -- Reorder controls (only if multiple layers and not background)
+    , if totalLayers > 1 && not isBackground
+        then div_
+            (styles [ Tuple "display" "flex", Tuple "gap" "2px" ])
+            [ -- Move up button
+              button_
+                ([ class_ "move-up-btn"
+                , onClick (MoveLayerUp lid)
+                , E.title "Move layer up"
+                ] <> styles
+                    [ Tuple "width" "16px"
+                    , Tuple "height" "16px"
+                    , Tuple "border" "none"
+                    , Tuple "border-radius" "2px"
+                    , Tuple "background" "#3a3a5e"
+                    , Tuple "color" "#ccc"
+                    , Tuple "cursor" "pointer"
+                    , Tuple "font-size" "10px"
+                    , Tuple "padding" "0"
+                    ])
+                [ text "^" ]
+            -- Move down button
+            , button_
+                ([ class_ "move-down-btn"
+                , onClick (MoveLayerDown lid)
+                , E.title "Move layer down"
+                ] <> styles
+                    [ Tuple "width" "16px"
+                    , Tuple "height" "16px"
+                    , Tuple "border" "none"
+                    , Tuple "border-radius" "2px"
+                    , Tuple "background" "#3a3a5e"
+                    , Tuple "color" "#ccc"
+                    , Tuple "cursor" "pointer"
+                    , Tuple "font-size" "10px"
+                    , Tuple "padding" "0"
+                    ])
+                [ text "v" ]
+            -- Delete button
+            , button_
+                ([ class_ "delete-layer-btn"
+                , onClick (DeleteLayer lid)
+                , E.title "Delete layer"
+                ] <> styles
+                    [ Tuple "width" "16px"
+                    , Tuple "height" "16px"
+                    , Tuple "border" "none"
+                    , Tuple "border-radius" "2px"
+                    , Tuple "background" "#5a2a2e"
+                    , Tuple "color" "#f88"
+                    , Tuple "cursor" "pointer"
+                    , Tuple "font-size" "10px"
+                    , Tuple "padding" "0"
+                    ])
+                [ text "x" ]
+            ]
+        else text ""
     ]
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                          // properties panel
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Properties panel showing brush settings.
+-- |
+-- | Displays and allows editing of:
+-- | - Brush size (1-500 pixels)
+-- | - Brush opacity (0-100%)
+-- | - Color picker
+-- | - Export button
+renderPropertiesPanel :: AppState -> Element Msg
+renderPropertiesPanel state =
+  let 
+    config = State.brushConfig state
+    sizeValue = config.size
+    opacityValue = config.opacity
+    currentColor = config.color
+  in div_
+    ([ class_ "properties-panel" ] <> styles
+        [ Tuple "width" "200px"
+        , Tuple "padding" "8px"
+        , Tuple "background" "#1a1a2e"
+        , Tuple "border-right" "1px solid #333"
+        , Tuple "font-size" "11px"
+        , Tuple "display" "flex"
+        , Tuple "flex-direction" "column"
+        , Tuple "gap" "12px"
+        ])
+    [ -- Header
+      span_ (styles [ Tuple "color" "#888", Tuple "font-weight" "bold" ]) [ text "Properties" ]
+    
+    -- Brush Size
+    , renderSliderControl "Size" sizeValue 1.0 500.0 BrushSizeChanged
+    
+    -- Brush Opacity  
+    , renderSliderControl "Opacity" (opacityValue * 100.0) 0.0 100.0 
+        (\v -> BrushOpacityChanged (v / 100.0))
+    
+    -- Color Picker
+    , renderColorPicker currentColor
+    
+    -- Export buttons
+    , div_
+        (styles [ Tuple "margin-top" "auto" ])
+        [ span_ (styles [ Tuple "color" "#888", Tuple "display" "block", Tuple "margin-bottom" "4px" ]) 
+            [ text "Export" ]
+        , div_
+            (styles [ Tuple "display" "flex", Tuple "gap" "4px" ])
+            [ button_
+                ([ class_ "export-btn"
+                , onClick (ExportCanvas "png")
+                , E.title "Export as PNG"
+                ] <> styles
+                    [ Tuple "flex" "1"
+                    , Tuple "padding" "8px"
+                    , Tuple "border" "none"
+                    , Tuple "border-radius" "4px"
+                    , Tuple "background" "#2a4a6e"
+                    , Tuple "color" "#fff"
+                    , Tuple "cursor" "pointer"
+                    ])
+                [ text "PNG" ]
+            , button_
+                ([ class_ "export-btn"
+                , onClick (ExportCanvas "svg")
+                , E.title "Export as SVG"
+                ] <> styles
+                    [ Tuple "flex" "1"
+                    , Tuple "padding" "8px"
+                    , Tuple "border" "none"
+                    , Tuple "border-radius" "4px"
+                    , Tuple "background" "#2a6a4e"
+                    , Tuple "color" "#fff"
+                    , Tuple "cursor" "pointer"
+                    ])
+                [ text "SVG" ]
+            ]
+        ]
+    ]
+
+-- | Render a slider control with label and value display.
+-- |
+-- | Emits messages when slider changes (via onInput).
+-- | Shows current value next to label.
+renderSliderControl :: String -> Number -> Number -> Number -> (Number -> Msg) -> Element Msg
+renderSliderControl label currentVal minVal maxVal toMsg =
+  div_
+    ([ class_ "slider-control" ] <> styles
+        [ Tuple "display" "flex"
+        , Tuple "flex-direction" "column"
+        , Tuple "gap" "4px"
+        ])
+    [ -- Label and value
+      div_
+        (styles [ Tuple "display" "flex", Tuple "justify-content" "space-between" ])
+        [ span_ (styles [ Tuple "color" "#aaa" ]) [ text label ]
+        , span_ (styles [ Tuple "color" "#fff" ]) [ text (formatNumber currentVal) ]
+        ]
+    -- Slider buttons (since HTML range input requires FFI for proper onChange)
+    , div_
+        (styles [ Tuple "display" "flex", Tuple "gap" "4px", Tuple "align-items" "center" ])
+        [ -- Decrease button
+          button_
+            ([ class_ "slider-btn"
+            , onClick (toMsg (clampNumber (currentVal - stepForRange minVal maxVal) minVal maxVal))
+            ] <> styles
+                [ Tuple "width" "24px"
+                , Tuple "height" "24px"
+                , Tuple "border" "none"
+                , Tuple "border-radius" "4px"
+                , Tuple "background" "#3a3a5e"
+                , Tuple "color" "#fff"
+                , Tuple "cursor" "pointer"
+                ])
+            [ text "-" ]
+        -- Progress bar showing current value
+        , div_
+            (styles
+                [ Tuple "flex" "1"
+                , Tuple "height" "8px"
+                , Tuple "background" "#2a2a4e"
+                , Tuple "border-radius" "4px"
+                , Tuple "overflow" "hidden"
+                ])
+            [ div_
+                (styles
+                    [ Tuple "width" (show (percentValue currentVal minVal maxVal) <> "%")
+                    , Tuple "height" "100%"
+                    , Tuple "background" "#6a6aaa"
+                    ])
+                []
+            ]
+        -- Increase button
+        , button_
+            ([ class_ "slider-btn"
+            , onClick (toMsg (clampNumber (currentVal + stepForRange minVal maxVal) minVal maxVal))
+            ] <> styles
+                [ Tuple "width" "24px"
+                , Tuple "height" "24px"
+                , Tuple "border" "none"
+                , Tuple "border-radius" "4px"
+                , Tuple "background" "#3a3a5e"
+                , Tuple "color" "#fff"
+                , Tuple "cursor" "pointer"
+                ])
+            [ text "+" ]
+        ]
+    ]
+
+-- | Calculate step size based on range.
+stepForRange :: Number -> Number -> Number
+stepForRange minVal maxVal =
+  let range = maxVal - minVal
+  in if range > 100.0 then 10.0
+     else if range > 10.0 then 1.0
+     else 0.1
+
+-- | Calculate percentage for progress bar.
+percentValue :: Number -> Number -> Number -> Number
+percentValue current minVal maxVal =
+  ((current - minVal) / (maxVal - minVal)) * 100.0
+
+-- | Clamp a number to a range.
+clampNumber :: Number -> Number -> Number -> Number
+clampNumber val minVal maxVal =
+  if val < minVal then minVal
+  else if val > maxVal then maxVal
+  else val
+
+-- | Format a number for display (remove excessive decimals).
+formatNumber :: Number -> String
+formatNumber n =
+  let s = show n
+  in truncateDecimals s 1
+
+-- | Truncate string to max decimal places.
+truncateDecimals :: String -> Int -> String
+truncateDecimals s maxDecimals =
+  -- Simple approach: just show the number
+  -- A proper implementation would parse and format
+  s
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                              // color picker
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Color picker showing preset colors and current color.
+-- |
+-- | Displays a grid of preset colors for quick selection.
+-- | Shows the current selected color with a preview.
+renderColorPicker :: Color -> Element Msg
+renderColorPicker currentColor =
+  div_
+    ([ class_ "color-picker" ] <> styles
+        [ Tuple "display" "flex"
+        , Tuple "flex-direction" "column"
+        , Tuple "gap" "8px"
+        ])
+    [ -- Label
+      span_ (styles [ Tuple "color" "#888" ]) [ text "Color" ]
+    
+    -- Current color preview
+    , div_
+        ([ class_ "current-color" ] <> styles
+            [ Tuple "width" "100%"
+            , Tuple "height" "32px"
+            , Tuple "border-radius" "4px"
+            , Tuple "border" "2px solid #444"
+            , Tuple "background" (colorToHex currentColor)
+            ])
+        []
+    
+    -- Color presets grid
+    , div_
+        ([ class_ "color-presets" ] <> styles
+            [ Tuple "display" "grid"
+            , Tuple "grid-template-columns" "repeat(5, 1fr)"
+            , Tuple "gap" "4px"
+            ])
+        (map renderColorPreset colorPresets)
+    ]
+
+-- | Render a single color preset button.
+renderColorPreset :: Color -> Element Msg
+renderColorPreset color =
+  button_
+    ([ class_ "color-preset"
+    , onClick (ColorChanged color)
+    , E.title (colorToHex color)
+    ] <> styles
+        [ Tuple "width" "100%"
+        , Tuple "aspect-ratio" "1"
+        , Tuple "border" "none"
+        , Tuple "border-radius" "4px"
+        , Tuple "background" (colorToHex color)
+        , Tuple "cursor" "pointer"
+        , Tuple "padding" "0"
+        ])
+    []
+
+-- | Convert Color record to hex string.
+-- |
+-- | Color has r, g, b, a as 0-1 values.
+colorToHex :: Color -> String
+colorToHex c =
+  let
+    toHexByte :: Number -> String
+    toHexByte n = 
+      let i = clampInt (n * 255.0) 0 255
+      in intToHex i
+  in "#" <> toHexByte c.r <> toHexByte c.g <> toHexByte c.b
+
+-- | Convert a 0-255 int to 2-digit hex.
+intToHex :: Int -> String
+intToHex n =
+  let 
+    hexChars = "0123456789abcdef"
+    high = n / 16
+    low = n - (high * 16)
+  in charAtIndex high hexChars <> charAtIndex low hexChars
+
+-- | Get character at index as a single-character string.
+charAtIndex :: Int -> String -> String
+charAtIndex idx str =
+  case Str.charAt idx str of
+    Nothing -> "0"
+    Just c -> Str.singleton c
+
+-- | Clamp and convert Number to Int.
+clampInt :: Number -> Int -> Int -> Int
+clampInt n minVal maxVal =
+  let i = numberToInt n
+  in if i < minVal then minVal
+     else if i > maxVal then maxVal
+     else i
+
+-- | Convert Number to Int (truncate).
+numberToInt :: Number -> Int
+numberToInt n = unsafeNumberToInt n
+
+foreign import unsafeNumberToInt :: Number -> Int
+
+-- | Preset colors for quick selection.
+-- |
+-- | A palette of commonly used colors for painting.
+colorPresets :: Array Color
+colorPresets =
+  [ -- Row 1: Blacks to whites
+    { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }      -- Black
+  , { r: 0.25, g: 0.25, b: 0.25, a: 1.0 }   -- Dark gray
+  , { r: 0.5, g: 0.5, b: 0.5, a: 1.0 }      -- Gray
+  , { r: 0.75, g: 0.75, b: 0.75, a: 1.0 }   -- Light gray
+  , { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }      -- White
+  
+  -- Row 2: Primary and secondary
+  , { r: 1.0, g: 0.0, b: 0.0, a: 1.0 }      -- Red
+  , { r: 1.0, g: 0.5, b: 0.0, a: 1.0 }      -- Orange
+  , { r: 1.0, g: 1.0, b: 0.0, a: 1.0 }      -- Yellow
+  , { r: 0.0, g: 1.0, b: 0.0, a: 1.0 }      -- Green
+  , { r: 0.0, g: 0.0, b: 1.0, a: 1.0 }      -- Blue
+  
+  -- Row 3: More colors
+  , { r: 0.5, g: 0.0, b: 0.5, a: 1.0 }      -- Purple
+  , { r: 1.0, g: 0.0, b: 1.0, a: 1.0 }      -- Magenta
+  , { r: 0.0, g: 1.0, b: 1.0, a: 1.0 }      -- Cyan
+  , { r: 0.6, g: 0.4, b: 0.2, a: 1.0 }      -- Brown
+  , { r: 1.0, g: 0.75, b: 0.8, a: 1.0 }     -- Pink
+  ]

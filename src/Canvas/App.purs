@@ -1,8 +1,8 @@
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
---                                                            // canvas // main
+--                                                            // canvas // app
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
--- | Canvas Main — Entry point for the physics-based paint application.
+-- | Canvas App — Entry point for the physics-based paint application.
 -- |
 -- | ## Architecture
 -- |
@@ -37,7 +37,7 @@
 -- | - Canvas.State (application state)
 -- | - Canvas.View (pure view function)
 
-module Main
+module Canvas.App
   ( -- * Entry Point
     main
     
@@ -62,6 +62,7 @@ import Prelude
   , unit
   , (+)
   , (/)
+  , (<)
   , (<>)
   , (==)
   , not
@@ -70,7 +71,7 @@ import Prelude
 import Effect (Effect)
 import Effect.Console (log)
 
-import Data.Array (head) as Array
+import Data.Array (head, index, length) as Array
 import Data.Maybe (Maybe(Just, Nothing))
 
 -- Hydrogen Runtime
@@ -85,11 +86,18 @@ import Hydrogen.Runtime.App
       , OnTouchMove
       , OnTouchEnd
       , OnDeviceOrientation
+      , OnDeviceMotion
+      , OnKeyDown
+      , OnPointerDown
+      , OnPointerMove
+      , OnPointerUp
       )
   , MousePos
   , MouseEvent
   , TouchEvent
   , DeviceOrientationEvent
+  , DeviceMotionEvent
+  , PointerEvent
   )
 
 import Hydrogen.Runtime.Cmd
@@ -104,10 +112,17 @@ import Hydrogen.Render.Element (Element)
 import Canvas.State as State
 import Canvas.State (AppState)
 import Canvas.View as View
-import Canvas.View (Msg)
+import Canvas.View (Msg, StylusInput)
 import Canvas.Types (Tool(BrushTool))
 import Canvas.Physics.Gravity as Gravity
 import Canvas.Runtime.DOM as DOM
+
+import Canvas.Paint.Particle as Paint
+import Canvas.Paint.Particle (PaintPreset(Watercolor, OilPaint, Acrylic, Gouache, Ink, Honey))
+import Hydrogen.Schema.Brush.WetMedia (WetMediaType(Watercolor, OilPaint, Acrylic, Gouache, Ink, WetIntoWet)) as WetMedia
+
+-- Easter eggs
+import Canvas.Easter as Easter
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                                 // app config
@@ -187,31 +202,75 @@ updateCanvas msg state = case msg of
   View.ToolSelected tool ->
     noCmd (State.setTool tool state)
   
-  -- Brush preset selection
-  View.BrushPresetSelected _presetName ->
-    -- TODO: Map preset name to actual preset
-    noCmd state
+  -- Brush preset selection (by name string from UI)
+  View.BrushPresetSelected presetName ->
+    let
+      preset = presetFromName presetName
+    in
+      noCmd (State.setBrushPreset preset state)
   
-  -- Media type selection (watercolor, oil, etc)
-  View.MediaTypeSelected _mediaType ->
-    -- TODO: Map media type to paint preset
-    noCmd state
+  -- Media type selection (watercolor, oil, etc from Hydrogen WetMedia)
+  View.MediaTypeSelected mediaType ->
+    let
+      preset = presetFromWetMedia mediaType
+    in
+      noCmd (State.setBrushPreset preset state)
   
   -- Color change
   View.ColorChanged color ->
     noCmd (State.setBrushColor color state)
   
-  -- Canvas touch/click start (add paint particle)
+  -- Brush size change
+  View.BrushSizeChanged size ->
+    noCmd (State.setBrushSize size state)
+  
+  -- Brush opacity change
+  View.BrushOpacityChanged opacity ->
+    noCmd (State.setBrushOpacity opacity state)
+  
+  -- Pointer down with full stylus data (pressure, tilt)
+  View.PointerDown input ->
+    let
+      -- Add a paint particle with full dynamics
+      withParticle = State.addPaintParticleWithDynamics 
+        input.x 
+        input.y 
+        input.pressure 
+        input.tiltX 
+        input.tiltY 
+        state
+      -- Push history for undo
+      withHistory = State.pushHistory "Paint stroke" withParticle
+    in
+      noCmd withHistory
+  
+  -- Pointer move with full stylus data
+  View.PointerMoved input ->
+    if isPaintingActive state
+      then noCmd (State.addPaintParticleWithDynamics 
+        input.x 
+        input.y 
+        input.pressure 
+        input.tiltX 
+        input.tiltY 
+        state)
+      else noCmd state
+  
+  -- Pointer up (stylus/touch lifted)
+  View.PointerUp ->
+    noCmd state
+  
+  -- Legacy: Canvas touch/click start (no pressure/tilt, for fallback)
   View.CanvasTouched x y ->
     let
-      -- Add a paint particle at touch position
+      -- Add a paint particle at touch position with default pressure
       withParticle = State.addPaintParticle x y state
       -- Push history for undo
       withHistory = State.pushHistory "Paint stroke" withParticle
     in
       noCmd withHistory
   
-  -- Canvas move (paint while dragging)
+  -- Legacy: Canvas move (paint while dragging, no pressure/tilt)
   View.CanvasMoved x y ->
     -- Only add particles if this is a painting tool
     if isPaintingActive state
@@ -262,15 +321,17 @@ updateCanvas msg state = case msg of
   View.Redo ->
     noCmd (State.redo state)
   
-  -- Animation frame tick (run physics simulation)
+  -- Animation frame tick (run physics simulation + confetti)
   View.Tick dt ->
     -- dt is delta time in milliseconds, convert to seconds
     let
       dtSeconds = dt / 1000.0
       -- Run physics simulation step
       simulated = State.simulatePaint dtSeconds state
+      -- Update confetti animation
+      withConfetti = State.updateEasterEggConfetti dtSeconds simulated
     in
-      noCmd simulated
+      noCmd withConfetti
   
   -- Layer selected
   View.LayerSelected lid ->
@@ -284,12 +345,155 @@ updateCanvas msg state = case msg of
       withHistory = State.pushHistory "Add layer" withLayer
     in
       noCmd withHistory
+  
+  -- Toggle layer visibility
+  View.LayerVisibilityToggled lid ->
+    noCmd (State.toggleLayerVisibility lid state)
+  
+  -- Delete layer
+  View.DeleteLayer lid ->
+    let
+      withRemoved = State.removeLayer lid state
+      withHistory = State.pushHistory "Delete layer" withRemoved
+    in
+      noCmd withHistory
+  
+  -- Move layer up in stack
+  View.MoveLayerUp lid ->
+    let
+      withMoved = State.moveLayerUp lid state
+      withHistory = State.pushHistory "Move layer up" withMoved
+    in
+      noCmd withHistory
+  
+  -- Move layer down in stack
+  View.MoveLayerDown lid ->
+    let
+      withMoved = State.moveLayerDown lid state
+      withHistory = State.pushHistory "Move layer down" withMoved
+    in
+      noCmd withHistory
+  
+  -- Easter egg: Key press (for Konami code detection)
+  View.KeyDown key ->
+    let
+      -- Process the key through easter egg detection
+      withKey = State.processEasterEggKey key state
+      -- Check if Konami code was triggered
+      eeState = State.easterEggState withKey
+    in
+      if Easter.konamiTriggered eeState
+        then 
+          -- KONAMI CODE TRIGGERED! Explode confetti from center!
+          let
+            centerX = 960.0  -- Canvas center X
+            centerY = 540.0  -- Canvas center Y
+            withConfetti = State.triggerEasterEggConfetti centerX centerY withKey
+            -- Reset the konami detection so it can trigger again
+            withReset = State.resetEasterEggs withConfetti
+          in
+            noCmd withReset
+        else
+          noCmd withKey
+  
+  -- Easter egg: Device motion (for shake detection)
+  View.DeviceMotion motion ->
+    let
+      -- Process the motion through shake detector
+      withMotion = State.processEasterEggMotion motion state
+      -- Check if shake was triggered
+      eeState = State.easterEggState withMotion
+    in
+      if Easter.shakeTriggered eeState
+        then
+          -- SHAKE DETECTED! Clear canvas etch-a-sketch style!
+          let
+            cleared = State.clearActiveLayer withMotion
+            withHistory = State.pushHistory "Shake clear" cleared
+            -- Reset shake detection so it can trigger again
+            withReset = State.resetEasterEggs withHistory
+          in
+            noCmd withReset
+        else
+          noCmd withMotion
+  
+  -- Viewport gesture: Pan
+  View.ViewportPan dx dy ->
+    noCmd (State.panViewport dx dy state)
+  
+  -- Viewport gesture: Zoom
+  View.ViewportZoom scaleFactor ->
+    noCmd (State.zoomViewport scaleFactor state)
+  
+  -- Viewport gesture: Zoom at point (pinch center stays fixed)
+  View.ViewportZoomAt x y scaleFactor ->
+    noCmd (State.zoomViewportAt x y scaleFactor state)
+  
+  -- Viewport gesture: Rotate
+  View.ViewportRotate deltaRotation ->
+    noCmd (State.rotateViewport deltaRotation state)
+  
+  -- Viewport: Reset to initial state
+  View.ViewportReset ->
+    noCmd (State.resetViewport state)
+  
+  -- Two-finger gesture: Process touch points for pan/pinch/rotate
+  View.TwoFingerTouch touch ->
+    let
+      p1 = { x: touch.x1, y: touch.y1 }
+      p2 = { x: touch.x2, y: touch.y2 }
+    in
+      noCmd (State.processTwoFingerGesture p1 p2 state)
+  
+  -- Two-finger gesture ended
+  View.TwoFingerEnd ->
+    noCmd (State.endTwoFingerGesture state)
+  
+  -- Export canvas (PNG or SVG)
+  -- Note: Actual export logic would require FFI to access canvas rendering
+  -- For now, this is a placeholder that logs the export request
+  View.ExportCanvas _format ->
+    -- TODO: Implement actual export via FFI (html2canvas, etc.)
+    -- For now, just return state unchanged
+    noCmd state
 
 -- | Check if painting is currently active (brush tool selected).
 isPaintingActive :: AppState -> Boolean
 isPaintingActive state =
   let tool = State.currentTool state
   in tool == BrushTool
+
+-- | Map preset name string to PaintPreset.
+-- |
+-- | Handles case-insensitive matching for UI flexibility.
+presetFromName :: String -> PaintPreset
+presetFromName name = case name of
+  "watercolor" -> Watercolor
+  "Watercolor" -> Watercolor
+  "oil" -> OilPaint
+  "Oil" -> OilPaint
+  "Oil Paint" -> OilPaint
+  "acrylic" -> Acrylic
+  "Acrylic" -> Acrylic
+  "gouache" -> Gouache
+  "Gouache" -> Gouache
+  "ink" -> Ink
+  "Ink" -> Ink
+  "honey" -> Honey
+  "Honey" -> Honey
+  _ -> Watercolor  -- Default fallback
+
+-- | Map WetMediaType to PaintPreset.
+-- |
+-- | Converts from Hydrogen's brush schema to Canvas paint presets.
+presetFromWetMedia :: WetMedia.WetMediaType -> PaintPreset
+presetFromWetMedia mediaType = case mediaType of
+  WetMedia.Watercolor -> Watercolor
+  WetMedia.OilPaint -> OilPaint
+  WetMedia.Acrylic -> Acrylic
+  WetMedia.Gouache -> Gouache
+  WetMedia.Ink -> Ink
+  WetMedia.WetIntoWet -> Watercolor  -- WetIntoWet is a watercolor technique
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                             // subscriptions
@@ -301,9 +505,12 @@ isPaintingActive state =
 -- | - Animation frame (physics simulation runs continuously when playing)
 -- | - Device orientation (gravity responds to device tilt)
 -- |
--- | ## Conditionally Active
--- | - Touch events (only when painting tool selected)
--- | - Mouse events (only when painting tool selected)
+-- | ## Pointer Events (Preferred)
+-- | - PointerEvents provide unified stylus/touch/mouse with pressure/tilt
+-- |
+-- | ## Legacy Events (Fallback)
+-- | - Touch events for older browsers
+-- | - Mouse events for desktop fallback
 subscriptionsCanvas :: AppState -> Array (Sub Msg)
 subscriptionsCanvas state =
   let
@@ -319,21 +526,37 @@ subscriptionsCanvas state =
         then [ OnDeviceOrientation handleDeviceOrientation ]
         else []
     
-    -- Touch events for painting
+    -- Pointer events (preferred - includes stylus pressure/tilt)
+    pointerSubs =
+      [ OnPointerDown handlePointerDown
+      , OnPointerMove handlePointerMove
+      , OnPointerUp handlePointerUp
+      ]
+    
+    -- Legacy touch events for painting (fallback)
     touchSubs = 
       [ OnTouchStart handleTouchStart
       , OnTouchMove handleTouchMove
       , OnTouchEnd handleTouchEnd
       ]
     
-    -- Mouse events for painting (desktop)
+    -- Legacy mouse events for painting (desktop fallback)
     mouseSubs =
       [ OnMouseDown handleMouseDown
       , OnMouseMove handleMouseMove
       , OnMouseUp handleMouseUp
       ]
+    
+    -- Easter egg subscriptions (always active)
+    -- Keyboard for Konami code detection
+    keyboardSub = [ OnKeyDown handleKeyDown ]
+    
+    -- Device motion for shake detection
+    motionSub = [ OnDeviceMotion handleDeviceMotion ]
   in
-    animationSub <> orientationSub <> touchSubs <> mouseSubs
+    -- Use pointer events as primary, keep legacy for compatibility
+    -- Add easter egg subs (keyboard, device motion)
+    animationSub <> orientationSub <> pointerSubs <> touchSubs <> mouseSubs <> keyboardSub <> motionSub
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                           // event handlers
@@ -359,23 +582,120 @@ handleDeviceOrientation event =
   in
     View.OrientationChanged orientation
 
--- | Handle touch start (begin painting).
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                  // easter egg event handlers
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Handle key press (for Konami code detection).
+-- |
+-- | Listens for arrow keys and letter keys to detect the Konami code:
+-- | ↑↑↓↓←→←→BA
+handleKeyDown :: String -> Msg
+handleKeyDown key = View.KeyDown key
+
+-- | Handle device motion (for shake detection).
+-- |
+-- | Converts DeviceMotionEvent to our simpler motion record.
+-- | Uses acceleration WITHOUT gravity for shake detection
+-- | (we want to detect rapid movement, not the phone's orientation).
+handleDeviceMotion :: DeviceMotionEvent -> Msg
+handleDeviceMotion event =
+  View.DeviceMotion
+    { accelerationX: event.accelerationX
+    , accelerationY: event.accelerationY
+    , accelerationZ: event.accelerationZ
+    , timestamp: event.interval  -- Use interval as rough timestamp
+    }
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                   // pointer event handlers
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Handle pointer down (stylus/touch/mouse with full data).
+-- |
+-- | Converts PointerEvent to StylusInput with:
+-- | - Position (x, y)
+-- | - Pressure (0.0-1.0)
+-- | - Tilt X/Y (-90 to 90 degrees)
+-- | - Pointer type ("pen", "touch", "mouse")
+handlePointerDown :: PointerEvent -> Msg
+handlePointerDown event =
+  View.PointerDown (pointerToStylus event)
+
+-- | Handle pointer move (stylus/touch/mouse move with full data).
+handlePointerMove :: PointerEvent -> Msg
+handlePointerMove event =
+  View.PointerMoved (pointerToStylus event)
+
+-- | Handle pointer up (stylus/touch/mouse lifted).
+handlePointerUp :: PointerEvent -> Msg
+handlePointerUp _event = View.PointerUp
+
+-- | Convert PointerEvent to StylusInput.
+-- |
+-- | Extracts all relevant stylus data from the browser event:
+-- | - For stylus: full pressure (0.0-1.0) and tilt data
+-- | - For touch: pressure from force, no tilt
+-- | - For mouse: pressure defaults to 0.5, no tilt
+pointerToStylus :: PointerEvent -> StylusInput
+pointerToStylus event =
+  { x: event.x
+  , y: event.y
+  , pressure: event.pressure
+  , tiltX: event.tiltX
+  , tiltY: event.tiltY
+  , pointerType: event.pointerType
+  }
+
+-- ═════════════════════════════════════════════════════════════════════════════
+--                                                   // legacy event handlers
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Handle touch start (begin painting or two-finger gesture).
+-- |
+-- | Detects multi-touch and routes appropriately:
+-- | - Single touch: Paint
+-- | - Two fingers: Pan/Pinch/Rotate viewport
 handleTouchStart :: TouchEvent -> Msg
 handleTouchStart event =
-  case Array.head event.changedTouches of
-    Just touch -> View.CanvasTouched touch.x touch.y
-    Nothing -> View.CanvasReleased
+  case touchCount event of
+    2 -> handleTwoFingerTouch event
+    _ -> case Array.head event.changedTouches of
+           Just touch -> View.CanvasTouched touch.x touch.y
+           Nothing -> View.CanvasReleased
 
--- | Handle touch move (continue painting).
+-- | Handle touch move (continue painting or two-finger gesture).
 handleTouchMove :: TouchEvent -> Msg
 handleTouchMove event =
-  case Array.head event.changedTouches of
-    Just touch -> View.CanvasMoved touch.x touch.y
-    Nothing -> View.CanvasReleased
+  case touchCount event of
+    2 -> handleTwoFingerTouch event
+    _ -> case Array.head event.changedTouches of
+           Just touch -> View.CanvasMoved touch.x touch.y
+           Nothing -> View.CanvasReleased
 
--- | Handle touch end (stop painting).
+-- | Handle touch end (stop painting or end gesture).
 handleTouchEnd :: TouchEvent -> Msg
-handleTouchEnd _event = View.CanvasReleased
+handleTouchEnd event =
+  -- If we had two fingers and now have fewer, end the gesture
+  if touchCount event < 2
+    then View.TwoFingerEnd
+    else View.CanvasReleased
+
+-- | Count current touches.
+touchCount :: TouchEvent -> Int
+touchCount event = Array.length event.touches
+
+-- | Handle two-finger touch for pan/pinch/rotate.
+handleTwoFingerTouch :: TouchEvent -> Msg
+handleTwoFingerTouch event =
+  case Array.head event.touches of
+    Nothing -> View.CanvasReleased
+    Just t1 -> case Array.index event.touches 1 of
+      Nothing -> View.CanvasReleased
+      Just t2 -> View.TwoFingerTouch
+        { x1: t1.x, y1: t1.y
+        , x2: t2.x, y2: t2.y
+        }
 
 -- | Handle mouse down (begin painting on desktop).
 handleMouseDown :: MouseEvent -> Msg
@@ -410,10 +730,10 @@ main = do
   
   -- Mount the application to #app
   -- This starts the animation loop and returns immediately
-  DOM.mount "#app" canvasApp updateCanvas View.view initCanvas
+  -- Pass particle extraction function for GPU rendering
+  let getParticlesFromState = \state -> Paint.allParticles (State.paintSystem state)
+  DOM.mount "#app" canvasApp updateCanvas View.view initCanvas getParticlesFromState
   
   -- Log completion and return unit
   log "Canvas Builder ready!"
   pure unit
-
-

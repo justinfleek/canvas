@@ -210,6 +210,14 @@ import Canvas.Layer.Types (Layer, sortedLayers, layerId, layerName, layerVisible
 import Canvas.Easter as Easter
 
 -- ═════════════════════════════════════════════════════════════════════════════
+--                                                                 // view state
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Specialized AppState for this module's Msg type.
+-- | AppState is now parameterized by message type for 3D layer handlers.
+type ViewState = AppState Msg
+
+-- ═════════════════════════════════════════════════════════════════════════════
 --                                                                   // msg type
 -- ═════════════════════════════════════════════════════════════════════════════
 
@@ -342,7 +350,7 @@ instance showMsg :: Show Msg where
 -- | - Main container has role="application" for complex widget
 -- | - Regions are labeled with ARIA landmarks
 -- | - Live region for status announcements
-view :: AppState -> Element Msg
+view :: ViewState -> Element Msg
 view state =
   div_
     ([ class_ "canvas-app"
@@ -383,7 +391,7 @@ view state =
 -- | Render confetti overlay for Konami code celebration.
 -- |
 -- | When the Konami code is entered, confetti explodes from the center!
-renderConfettiOverlay :: AppState -> Element Msg
+renderConfettiOverlay :: ViewState -> Element Msg
 renderConfettiOverlay state =
   Easter.renderConfetti (State.easterEggState state)
 
@@ -396,7 +404,7 @@ renderConfettiOverlay state =
 -- | ## Accessibility
 -- | - Toolbar role for screen readers
 -- | - Contains tool groups with group roles
-renderToolbar :: AppState -> Element Msg
+renderToolbar :: ViewState -> Element Msg
 renderToolbar state =
   div_
     ([ class_ "canvas-toolbar"
@@ -420,7 +428,7 @@ renderToolbar state =
 -- | ## Accessibility
 -- | - Group role for related buttons
 -- | - Each tool button has ariaLabel
-renderToolButtons :: AppState -> Element Msg
+renderToolButtons :: ViewState -> Element Msg
 renderToolButtons state =
   div_
     ([ class_ "tool-buttons"
@@ -438,7 +446,7 @@ renderToolButtons state =
 -- | ## Accessibility
 -- | - ariaLabel describes the tool function
 -- | - aria-pressed indicates if tool is active
-toolButton :: Tool -> String -> String -> AppState -> Element Msg
+toolButton :: Tool -> String -> String -> ViewState -> Element Msg
 toolButton tool label description state =
   let isActive = State.currentTool state == tool
       activeClass = if isActive then "tool-btn active" else "tool-btn"
@@ -462,7 +470,7 @@ toolButton tool label description state =
 -- | ## Accessibility
 -- | - Group role for related actions
 -- | - Each button has descriptive ariaLabel
-renderActionButtons :: AppState -> Element Msg
+renderActionButtons :: ViewState -> Element Msg
 renderActionButtons state =
   div_
     ([ class_ "action-buttons"
@@ -509,7 +517,7 @@ actionButton msg label description enabled =
 -- |
 -- | Uses essentialsKit from Presets library for a curated set of brushes.
 -- | Each button shows the preset name and description on hover.
-renderBrushSelector :: AppState -> Element Msg
+renderBrushSelector :: ViewState -> Element Msg
 renderBrushSelector _state =
   div_
     ([ class_ "brush-selector" ] <> styles
@@ -555,7 +563,7 @@ shortPresetName name = name  -- Full name for now, could truncate if needed
 -- | Media type selector (Watercolor, Oil, Acrylic, etc).
 -- |
 -- | Dynamically populated from allWetMediaTypes with full descriptions.
-renderMediaSelector :: AppState -> Element Msg
+renderMediaSelector :: ViewState -> Element Msg
 renderMediaSelector _state =
   div_
     ([ class_ "media-selector" ] <> styles
@@ -616,7 +624,7 @@ mediaLabel WetIntoWet = "W/W"
 -- | - role="img" for screen readers (canvas is a complex image)
 -- | - ariaLabel describes the canvas content
 -- | - tabIndex allows keyboard focus for shortcuts
-renderCanvas :: AppState -> Element Msg
+renderCanvas :: ViewState -> Element Msg
 renderCanvas state =
   let particleCount = Paint.particleCount (State.paintSystem state)
       canvasDescription = "Paint canvas with " <> show particleCount <> " particles. Press Tab to focus, then use Ctrl+Z to undo, Ctrl+Shift+Z to redo."
@@ -651,7 +659,7 @@ renderCanvas state =
 -- |
 -- | Uses a GPU-accelerated canvas element for particle rendering.
 -- | The actual rendering is done by Canvas.Runtime.GPU in the animation loop.
-renderPaintLayers :: AppState -> Element Msg
+renderPaintLayers :: ViewState -> Element Msg
 renderPaintLayers state =
   div_
     ([ class_ "paint-layers" ] <> styles
@@ -669,7 +677,7 @@ renderPaintLayers state =
 -- |
 -- | This canvas is rendered to by Canvas.Runtime.GPU using WebGL/WebGPU/Canvas2D.
 -- | The id "paint-canvas" is used by GPU.initialize to get the rendering context.
-renderGPUCanvas :: AppState -> Element Msg
+renderGPUCanvas :: ViewState -> Element Msg
 renderGPUCanvas _state =
   E.canvas_
     ([ id_ "paint-canvas"
@@ -687,14 +695,14 @@ renderGPUCanvas _state =
 -- |
 -- | This is kept as a fallback in case GPU initialization fails.
 -- | It's hidden by default when GPU rendering is active.
-renderParticles :: AppState -> Element Msg
+renderParticles :: ViewState -> Element Msg
 renderParticles state = renderParticlesSVGFallback state
 
 -- | SVG fallback for particle rendering.
 -- |
 -- | Hidden by default (display: none) when GPU canvas is present.
 -- | Useful for debugging or when GPU is unavailable.
-renderParticlesSVGFallback :: AppState -> Element Msg
+renderParticlesSVGFallback :: ViewState -> Element Msg
 renderParticlesSVGFallback state =
   let particles = Paint.allParticles (State.paintSystem state)
   in E.svg_
@@ -734,7 +742,7 @@ renderSingleParticle p =
 -- | Rotates based on device tilt. Arrow points "down" in gravity space.
 -- | Uses GravityVector from Hydrogen.Schema.Canvas.Physics for calculations.
 -- | Tooltip shows gravity magnitude in g units.
-renderGravityIndicator :: AppState -> Element Msg
+renderGravityIndicator :: ViewState -> Element Msg
 renderGravityIndicator state =
   let gravState = State.gravityState state
       gravVector :: GravityVector
@@ -797,7 +805,7 @@ atan2Deg y x = (atan2 y x) * 180.0 / pi
 -- | Debug overlay showing state information.
 -- |
 -- | Displays detailed gravity information using GravityVector accessors.
-renderDebugOverlay :: AppState -> Element Msg
+renderDebugOverlay :: ViewState -> Element Msg
 renderDebugOverlay state =
   let gravState = State.gravityState state
       gravVector = Gravity.currentGravity gravState
@@ -849,7 +857,7 @@ renderDebugOverlay state =
 -- | ## Accessibility
 -- | - contentinfo landmark for footer
 -- | - Live region for status updates
-renderStatusBar :: AppState -> Element Msg
+renderStatusBar :: ViewState -> Element Msg
 renderStatusBar state =
   let particleCount = Paint.particleCount (State.paintSystem state)
   in div_
@@ -896,7 +904,7 @@ renderStatusBar state =
 -- | - complementary landmark for sidebar
 -- | - List role for layer stack
 -- | - Individual layers are selectable with keyboard
-renderLayerPanel :: AppState -> Element Msg
+renderLayerPanel :: ViewState -> Element Msg
 renderLayerPanel state =
   let 
     stack = State.layerStack state
@@ -1085,7 +1093,7 @@ renderLayerItem activeId totalLayers layer =
 -- | ## Accessibility
 -- | - complementary landmark for sidebar
 -- | - Controls have descriptive labels
-renderPropertiesPanel :: AppState -> Element Msg
+renderPropertiesPanel :: ViewState -> Element Msg
 renderPropertiesPanel state =
   let 
     config = State.brushConfig state

@@ -90,6 +90,9 @@ module Canvas.State
   
   -- * Layer Operations
   , addLayer
+  , addLayer3D
+  , updateLayer3DContent
+  , getLayer3DContent
   , removeLayer
   , setLayerVisibility
   , toggleLayerVisibility
@@ -153,6 +156,8 @@ import Prelude
 
 import Data.Array (length, snoc, unsnoc) as Array
 import Data.Maybe (Maybe(Just, Nothing))
+import Data.Map (Map)
+import Data.Map (empty, insert, lookup, delete) as Map
 
 -- Canvas modules
 import Canvas.Types
@@ -177,6 +182,7 @@ import Canvas.Layer.Types
   , mkLayerStack
   , emptyLayerStack
   , mkLayer
+  , mkLayer3D
   , addLayer
   , removeLayer
   , getActiveLayer
@@ -189,7 +195,13 @@ import Canvas.Layer.Types
   , moveLayerUp
   , moveLayerDown
   , layerVisible
+  , LayerContentType(Paint2DContent, Scene3DContent)
+  , isPaint2DLayer
+  , isScene3DLayer
   ) as Layer
+
+import Canvas.Layer.Layer3D as Layer3D
+import Canvas.Layer.Layer3D (Layer3DContent)
 
 import Canvas.Paint.Particle
   ( PaintSystem
@@ -363,7 +375,13 @@ type HistoryEntry =
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Complete application state for Canvas paint app.
-type AppState =
+-- |
+-- | ## Msg Parameter
+-- |
+-- | The msg type parameter allows 3D layers to have click/hover handlers
+-- | that produce application messages. For the canvas app, this is typically
+-- | the Msg type from Canvas.App.
+type AppState msg =
   { -- Canvas bounds
     canvasBounds :: Bounds
     
@@ -381,6 +399,10 @@ type AppState =
   
   -- Paint particle system (per active layer)
   , paint :: Paint.PaintSystem
+  
+  -- 3D layer content (keyed by layer ID)
+  -- Each 3D layer stores its scene separately from the layer metadata
+  , layer3DContent :: Map Int (Layer3DContent msg)
   
   -- Device gravity
   , gravity :: Gravity.GravityState
@@ -411,7 +433,7 @@ type AppState =
   }
 
 -- | Create app state with specified bounds.
-mkAppState :: Number -> Number -> AppState
+mkAppState :: forall msg. Number -> Number -> AppState msg
 mkAppState width height =
   let
     bounds = mkBounds 0.0 0.0 width height
@@ -424,6 +446,7 @@ mkAppState width height =
     , brush: defaultBrushConfig
     , layers: Layer.mkLayerStack [bgLayer, defaultLayer] defaultLayerId
     , paint: Paint.mkPaintSystem bounds Paint.Watercolor
+    , layer3DContent: Map.empty
     , gravity: Gravity.initialGravityState
     , playing: false
     , frameCount: 0
@@ -440,7 +463,7 @@ mkAppState width height =
     }
 
 -- | Initial app state (1920x1080 canvas).
-initialAppState :: AppState
+initialAppState :: forall msg. AppState msg
 initialAppState = mkAppState 1920.0 1080.0
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -448,85 +471,89 @@ initialAppState = mkAppState 1920.0 1080.0
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Get canvas viewport bounds.
-viewport :: AppState -> Bounds
+viewport :: forall msg. AppState msg -> Bounds
 viewport s = s.canvasBounds
 
 -- | Get current tool.
-currentTool :: AppState -> Tool
+currentTool :: forall msg. AppState msg -> Tool
 currentTool s = s.tool
 
 -- | Get paint system.
-paintSystem :: AppState -> Paint.PaintSystem
+paintSystem :: forall msg. AppState msg -> Paint.PaintSystem
 paintSystem s = s.paint
 
 -- | Get gravity state.
-gravityState :: AppState -> Gravity.GravityState
+gravityState :: forall msg. AppState msg -> Gravity.GravityState
 gravityState s = s.gravity
 
 -- | Get layer stack.
-layerStack :: AppState -> Layer.LayerStack
+layerStack :: forall msg. AppState msg -> Layer.LayerStack
 layerStack s = s.layers
 
 -- | Get brush config.
-brushConfig :: AppState -> BrushConfig
+brushConfig :: forall msg. AppState msg -> BrushConfig
 brushConfig s = s.brush
 
 -- | Get active layer ID.
-activeLayerId :: AppState -> LayerId
+activeLayerId :: forall msg. AppState msg -> LayerId
 activeLayerId s = Layer.stackActiveLayerId s.layers
 
 -- | Check if simulation is playing.
-isPlaying :: AppState -> Boolean
+isPlaying :: forall msg. AppState msg -> Boolean
 isPlaying s = s.playing
 
 -- | Get easter egg state.
-easterEggState :: AppState -> EasterEggState
+easterEggState :: forall msg. AppState msg -> EasterEggState
 easterEggState s = s.easterEggs
 
 -- | Get viewport state.
-viewportState :: AppState -> ViewportState
+viewportState :: forall msg. AppState msg -> ViewportState
 viewportState s = s.viewportState
 
 -- | Get gesture tracking state.
-gestureTracking :: AppState -> GestureTrackingState
+gestureTracking :: forall msg. AppState msg -> GestureTrackingState
 gestureTracking s = s.gesture
+
+-- | Get 3D layer content for a layer.
+getLayer3DContent :: forall msg. LayerId -> AppState msg -> Maybe (Layer3DContent msg)
+getLayer3DContent lid s = Map.lookup (unwrapLayerId lid) s.layer3DContent
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                              // state updates
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Set current tool.
-setTool :: Tool -> AppState -> AppState
+setTool :: forall msg. Tool -> AppState msg -> AppState msg
 setTool t s = s { tool = t }
 
 -- | Set brush size.
-setBrushSize :: Number -> AppState -> AppState
+setBrushSize :: forall msg. Number -> AppState msg -> AppState msg
 setBrushSize sz s = 
   s { brush = s.brush { size = max 1.0 (min 500.0 sz) } }
 
 -- | Set brush opacity.
-setBrushOpacity :: Number -> AppState -> AppState
+setBrushOpacity :: forall msg. Number -> AppState msg -> AppState msg
 setBrushOpacity op s = 
   s { brush = s.brush { opacity = max 0.0 (min 1.0 op) } }
 
 -- | Set brush color.
-setBrushColor :: Color -> AppState -> AppState
+setBrushColor :: forall msg. Color -> AppState msg -> AppState msg
 setBrushColor c s = s { brush = s.brush { color = c } }
 
 -- | Set brush preset (paint type).
-setBrushPreset :: Paint.PaintPreset -> AppState -> AppState
+setBrushPreset :: forall msg. Paint.PaintPreset -> AppState msg -> AppState msg
 setBrushPreset p s = 
   s { brush = s.brush { preset = p }
     , paint = s.paint { preset = p }
     }
 
 -- | Set active layer.
-setActiveLayer :: LayerId -> AppState -> AppState
+setActiveLayer :: forall msg. LayerId -> AppState msg -> AppState msg
 setActiveLayer lid s = 
   s { layers = Layer.setActiveLayer lid s.layers }
 
 -- | Toggle simulation playing state.
-togglePlaying :: AppState -> AppState
+togglePlaying :: forall msg. AppState msg -> AppState msg
 togglePlaying s = s { playing = not s.playing }
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -534,7 +561,7 @@ togglePlaying s = s { playing = not s.playing }
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Add a paint particle at position (default pressure).
-addPaintParticle :: Number -> Number -> AppState -> AppState
+addPaintParticle :: forall msg. Number -> Number -> AppState msg -> AppState msg
 addPaintParticle px py s =
   s { paint = Paint.addParticle s.paint px py s.brush.color }
 
@@ -547,13 +574,14 @@ addPaintParticle px py s =
 -- |
 -- | This is the professional art tool path for realistic paint simulation.
 addPaintParticleWithDynamics 
-  :: Number          -- ^ X position
+  :: forall msg
+   . Number          -- ^ X position
   -> Number          -- ^ Y position
   -> Number          -- ^ Pressure (0.0-1.0)
   -> Number          -- ^ Tilt X (-90 to 90)
   -> Number          -- ^ Tilt Y (-90 to 90)
-  -> AppState 
-  -> AppState
+  -> AppState msg
+  -> AppState msg
 addPaintParticleWithDynamics px py pressure tiltX tiltY s =
   let
     -- Apply pressure to brush size (20% to 100% based on pressure)
@@ -584,7 +612,7 @@ addPaintParticleWithDynamics px py pressure tiltX tiltY s =
     restored
 
 -- | Clear all particles from active layer.
-clearActiveLayer :: AppState -> AppState
+clearActiveLayer :: forall msg. AppState msg -> AppState msg
 clearActiveLayer s = s { paint = Paint.clearParticles s.paint }
 
 -- | Apply brush drag when pointer moves.
@@ -594,11 +622,12 @@ clearActiveLayer s = s { paint = Paint.clearParticles s.paint }
 -- |
 -- | Should be called on pointer move events when pointer is down.
 applyBrushDragFromPointer 
-  :: Number          -- ^ Current X
+  :: forall msg
+   . Number          -- ^ Current X
   -> Number          -- ^ Current Y
   -> Number          -- ^ Pressure (0-1)
-  -> AppState 
-  -> AppState
+  -> AppState msg
+  -> AppState msg
 applyBrushDragFromPointer cx cy pressure s =
   if s.pointerDown
     then
@@ -621,7 +650,7 @@ applyBrushDragFromPointer cx cy pressure s =
       s { lastPointerX = cx, lastPointerY = cy }
 
 -- | Set pointer down state and initial position.
-setPointerDown :: Number -> Number -> AppState -> AppState
+setPointerDown :: forall msg. Number -> Number -> AppState msg -> AppState msg
 setPointerDown x y s = 
   s { pointerDown = true
     , lastPointerX = x
@@ -629,11 +658,11 @@ setPointerDown x y s =
     }
 
 -- | Set pointer up state.
-setPointerUp :: AppState -> AppState
+setPointerUp :: forall msg. AppState msg -> AppState msg
 setPointerUp s = s { pointerDown = false }
 
 -- | Run one simulation step.
-simulatePaint :: Number -> AppState -> AppState
+simulatePaint :: forall msg. Number -> AppState msg -> AppState msg
 simulatePaint dt s =
   if s.playing
     then
@@ -655,12 +684,12 @@ simulatePaint dt s =
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Update gravity from device orientation.
-updateGravity :: Number -> Number -> Number -> AppState -> AppState
+updateGravity :: forall msg. Number -> Number -> Number -> AppState msg -> AppState msg
 updateGravity alpha beta gamma s =
   s { gravity = Gravity.updateFromOrientation alpha beta gamma s.gravity }
 
 -- | Enable or disable gravity.
-setGravityEnabled :: Boolean -> AppState -> AppState
+setGravityEnabled :: forall msg. Boolean -> AppState msg -> AppState msg
 setGravityEnabled en s =
   s { gravity = Gravity.setGravityEnabled en s.gravity }
 
@@ -669,7 +698,7 @@ setGravityEnabled en s =
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Add a new paint layer.
-addLayer :: String -> AppState -> AppState
+addLayer :: forall msg. String -> AppState msg -> AppState msg
 addLayer name s =
   let
     newId = mkLayerId (Layer.layerCount s.layers + 1)
@@ -678,21 +707,45 @@ addLayer name s =
   in
     s { layers = Layer.addLayer newLayer s.layers }
 
+-- | Add a new 3D layer.
+addLayer3D :: forall msg. String -> AppState msg -> AppState msg
+addLayer3D name s =
+  let
+    newId = mkLayerId (Layer.layerCount s.layers + 1)
+    newZ = mkZIndex (Layer.layerCount s.layers + 1)
+    newLayer = Layer.mkLayer3D newId name newZ s.canvasBounds
+    -- Create empty 3D content for this layer
+    content3D = Layer3D.emptyLayer3DContent
+  in
+    s { layers = Layer.addLayer newLayer s.layers
+      , layer3DContent = Map.insert (unwrapLayerId newId) content3D s.layer3DContent
+      }
+
+-- | Update 3D layer content.
+updateLayer3DContent :: forall msg. LayerId -> (Layer3DContent msg -> Layer3DContent msg) -> AppState msg -> AppState msg
+updateLayer3DContent lid f s =
+  case Map.lookup (unwrapLayerId lid) s.layer3DContent of
+    Nothing -> s
+    Just content ->
+      s { layer3DContent = Map.insert (unwrapLayerId lid) (f content) s.layer3DContent }
+
 -- | Remove a layer by ID.
-removeLayer :: LayerId -> AppState -> AppState
+removeLayer :: forall msg. LayerId -> AppState msg -> AppState msg
 removeLayer lid s =
   -- Don't allow removing background layer
   if unwrapLayerId lid == 0
     then s
-    else s { layers = Layer.removeLayer lid s.layers }
+    else s { layers = Layer.removeLayer lid s.layers
+           , layer3DContent = Map.delete (unwrapLayerId lid) s.layer3DContent
+           }
 
 -- | Set layer visibility.
-setLayerVisibility :: LayerId -> Boolean -> AppState -> AppState
+setLayerVisibility :: forall msg. LayerId -> Boolean -> AppState msg -> AppState msg
 setLayerVisibility lid vis s =
   s { layers = Layer.updateLayer lid (Layer.setLayerVisible vis) s.layers }
 
 -- | Toggle layer visibility.
-toggleLayerVisibility :: LayerId -> AppState -> AppState
+toggleLayerVisibility :: forall msg. LayerId -> AppState msg -> AppState msg
 toggleLayerVisibility lid s =
   case Layer.getLayer lid s.layers of
     Nothing -> s
@@ -701,17 +754,17 @@ toggleLayerVisibility lid s =
       in setLayerVisibility lid (not currentVis) s
 
 -- | Move a layer up in the stack (higher Z-index).
-moveLayerUp :: LayerId -> AppState -> AppState
+moveLayerUp :: forall msg. LayerId -> AppState msg -> AppState msg
 moveLayerUp lid s =
   s { layers = Layer.moveLayerUp lid s.layers }
 
 -- | Move a layer down in the stack (lower Z-index).
-moveLayerDown :: LayerId -> AppState -> AppState
+moveLayerDown :: forall msg. LayerId -> AppState msg -> AppState msg
 moveLayerDown lid s =
   s { layers = Layer.moveLayerDown lid s.layers }
 
 -- | Get total layer count.
-layerCount :: AppState -> Int
+layerCount :: forall msg. AppState msg -> Int
 layerCount s = Layer.layerCount s.layers
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -721,7 +774,7 @@ layerCount s = Layer.layerCount s.layers
 -- | Pan the viewport by delta.
 -- |
 -- | Used for two-finger pan gestures or click-and-drag navigation.
-panViewport :: Number -> Number -> AppState -> AppState
+panViewport :: forall msg. Number -> Number -> AppState msg -> AppState msg
 panViewport dx dy s =
   let vp = s.viewportState
   in s { viewportState = vp { panX = vp.panX + dx, panY = vp.panY + dy } }
@@ -730,7 +783,7 @@ panViewport dx dy s =
 -- |
 -- | Scale is multiplicative: 2.0 doubles the zoom, 0.5 halves it.
 -- | Clamped to minScale..maxScale range.
-zoomViewport :: Number -> AppState -> AppState
+zoomViewport :: forall msg. Number -> AppState msg -> AppState msg
 zoomViewport scaleDelta s =
   let 
     vp = s.viewportState
@@ -741,7 +794,7 @@ zoomViewport scaleDelta s =
 -- |
 -- | Used for pinch-to-zoom where the center of the pinch should stay fixed.
 -- | This adjusts pan to keep the focal point stationary.
-zoomViewportAt :: Number -> Number -> Number -> AppState -> AppState
+zoomViewportAt :: forall msg. Number -> Number -> Number -> AppState msg -> AppState msg
 zoomViewportAt centerX centerY scaleDelta s =
   let 
     vp = s.viewportState
@@ -768,7 +821,7 @@ zoomViewportAt centerX centerY scaleDelta s =
 -- | Rotate the viewport by angle (in radians).
 -- |
 -- | Used for two-finger rotate gestures.
-rotateViewport :: Number -> AppState -> AppState
+rotateViewport :: forall msg. Number -> AppState msg -> AppState msg
 rotateViewport deltaRotation s =
   let vp = s.viewportState
   in s { viewportState = vp { rotation = vp.rotation + deltaRotation } }
@@ -776,7 +829,7 @@ rotateViewport deltaRotation s =
 -- | Reset viewport to initial state.
 -- |
 -- | Double-tap or reset button brings view back to 100%, centered, no rotation.
-resetViewport :: AppState -> AppState
+resetViewport :: forall msg. AppState msg -> AppState msg
 resetViewport s = s { viewportState = initialViewport }
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -793,10 +846,11 @@ resetViewport s = s { viewportState = initialViewport }
 -- | - Subsequent calls compute deltas from previous state
 -- | - Returns updated state with new viewport transform
 processTwoFingerGesture 
-  :: { x :: Number, y :: Number }  -- ^ First touch point
+  :: forall msg
+   . { x :: Number, y :: Number }  -- ^ First touch point
   -> { x :: Number, y :: Number }  -- ^ Second touch point
-  -> AppState 
-  -> AppState
+  -> AppState msg
+  -> AppState msg
 processTwoFingerGesture p1 p2 s =
   let
     -- Convert to Point type for Hydrogen gesture functions
@@ -866,7 +920,7 @@ processTwoFingerGesture p1 p2 s =
 -- |
 -- | Called when touch ends or goes to single touch.
 -- | Resets gesture tracking state.
-endTwoFingerGesture :: AppState -> AppState
+endTwoFingerGesture :: forall msg. AppState msg -> AppState msg
 endTwoFingerGesture s = s { gesture = initialGestureTracking }
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -874,15 +928,15 @@ endTwoFingerGesture s = s { gesture = initialGestureTracking }
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Check if undo is available.
-canUndo :: AppState -> Boolean
+canUndo :: forall msg. AppState msg -> Boolean
 canUndo s = Array.length s.undoStack > 0
 
 -- | Check if redo is available.
-canRedo :: AppState -> Boolean
+canRedo :: forall msg. AppState msg -> Boolean
 canRedo s = Array.length s.redoStack > 0
 
 -- | Push current state to history.
-pushHistory :: String -> AppState -> AppState
+pushHistory :: forall msg. String -> AppState msg -> AppState msg
 pushHistory label s =
   let
     entry = { layerStack: s.layers, label: label }
@@ -900,7 +954,7 @@ pushHistory label s =
       }
 
 -- | Undo last action.
-undo :: AppState -> AppState
+undo :: forall msg. AppState msg -> AppState msg
 undo s =
   case Array.unsnoc s.undoStack of
     Nothing -> s  -- Nothing to undo
@@ -915,7 +969,7 @@ undo s =
           }
 
 -- | Redo last undone action.
-redo :: AppState -> AppState
+redo :: forall msg. AppState msg -> AppState msg
 redo s =
   case Array.unsnoc s.redoStack of
     Nothing -> s  -- Nothing to redo
@@ -934,34 +988,35 @@ redo s =
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Process a key press for easter egg detection (Konami code).
-processEasterEggKey :: String -> AppState -> AppState
+processEasterEggKey :: forall msg. String -> AppState msg -> AppState msg
 processEasterEggKey key s =
   s { easterEggs = Easter.processKey key s.easterEggs }
 
 -- | Process device motion for easter egg detection (shake).
 processEasterEggMotion 
-  :: { accelerationX :: Number
+  :: forall msg
+   . { accelerationX :: Number
      , accelerationY :: Number
      , accelerationZ :: Number
      , timestamp :: Number
      }
-  -> AppState 
-  -> AppState
+  -> AppState msg
+  -> AppState msg
 processEasterEggMotion motion s =
   s { easterEggs = Easter.processMotion motion s.easterEggs }
 
 -- | Update confetti animation each frame.
-updateEasterEggConfetti :: Number -> AppState -> AppState
+updateEasterEggConfetti :: forall msg. Number -> AppState msg -> AppState msg
 updateEasterEggConfetti dt s =
   s { easterEggs = Easter.updateConfetti dt s.easterEggs }
 
 -- | Trigger confetti explosion at position (for Konami code reward).
-triggerEasterEggConfetti :: Number -> Number -> AppState -> AppState
+triggerEasterEggConfetti :: forall msg. Number -> Number -> AppState msg -> AppState msg
 triggerEasterEggConfetti x y s =
   s { easterEggs = Easter.triggerConfetti x y s.easterEggs }
 
 -- | Reset easter egg detection states after handling triggers.
-resetEasterEggs :: AppState -> AppState
+resetEasterEggs :: forall msg. AppState msg -> AppState msg
 resetEasterEggs s =
   s { easterEggs = Easter.reset s.easterEggs }
 
@@ -970,7 +1025,7 @@ resetEasterEggs s =
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | Display app state summary.
-displayAppState :: AppState -> String
+displayAppState :: forall msg. AppState msg -> String
 displayAppState s =
   "Canvas { " <>
   "tool=" <> show s.tool <> ", " <>

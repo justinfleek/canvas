@@ -47,11 +47,13 @@ module Canvas.Runtime.GPU
   -- * Rendering
   , renderParticles
   , renderFrame
+  , renderScene3D
   , clear
   
   -- * Info
   , getBackendName
   , getGPUInfo
+  , getParticleCount
   
   -- * Particle conversion
   , particlesToCommands
@@ -59,6 +61,7 @@ module Canvas.Runtime.GPU
 
 import Prelude
   ( Unit
+  , Void
   , bind
   , discard
   , map
@@ -79,7 +82,7 @@ import Effect.Class.Console as Console
 
 import Hydrogen.Target.GPU as GPU
 import Hydrogen.GPU.DrawCommand.Types
-  ( DrawCommand(DrawParticle)
+  ( DrawCommand(DrawParticle, DrawScene3D)
   , ParticleParams
   , PickId
   )
@@ -90,6 +93,7 @@ import Hydrogen.Schema.Dimension.Device as Device
 
 import Canvas.Paint.Particle as Paint
 import Canvas.Types as Types
+import Canvas.Layer.Layer3D as Layer3D
 
 -- ═══════════════════════════════════════════════════════════════════════════
 --                                                                // runtime
@@ -141,15 +145,17 @@ dispose runtime = GPU.dispose runtime.renderer
 -- |
 -- | This is the main render function called each frame.
 -- | Converts particles to DrawCommands and renders via GPU.
-renderParticles :: forall msg. GPURuntime -> Array Paint.Particle -> Effect Unit
+-- |
+-- | Note: Particles don't have click handlers, so we use Void as the msg type.
+renderParticles :: GPURuntime -> Array Paint.Particle -> Effect Unit
 renderParticles runtime particles = do
-  let commands = particlesToCommands particles
+  let commands :: Array (DrawCommand Void)
+      commands = particlesToCommands particles
   GPU.render runtime.renderer commands
 
 -- | Render a complete frame with background clear and particles.
 renderFrame 
-  :: forall msg
-   . GPURuntime 
+  :: GPURuntime 
   -> { r :: Number, g :: Number, b :: Number, a :: Number }
   -> Array Paint.Particle 
   -> Effect Unit
@@ -175,6 +181,13 @@ getBackendName runtime = backendToString runtime.backend
 getGPUInfo :: GPURuntime -> Effect GPU.GPUInfo
 getGPUInfo runtime = GPU.getGPUInfo runtime.renderer
 
+-- | Get the count of particles in an array.
+-- |
+-- | Useful for performance monitoring and debugging.
+-- | Returns the number of particles that would be rendered.
+getParticleCount :: Array Paint.Particle -> Int
+getParticleCount particles = Array.length particles
+
 -- | Convert Backend to display string.
 backendToString :: GPU.Backend -> String
 backendToString backend = case backend of
@@ -192,7 +205,9 @@ backendToString backend = case backend of
 -- | - Position (x, y) in screen coordinates
 -- | - Size (radius) in pixels
 -- | - Color (RGBA)
-particlesToCommands :: forall msg. Array Paint.Particle -> Array (DrawCommand msg)
+-- |
+-- | Uses Void as the message type since particles don't have click handlers.
+particlesToCommands :: Array Paint.Particle -> Array (DrawCommand Void)
 particlesToCommands particles = map particleToCommand particles
 
 -- | Convert a single paint particle to a DrawCommand.
@@ -200,7 +215,7 @@ particlesToCommands particles = map particleToCommand particles
 -- | Uses particle height for z-ordering (impasto effect).
 -- | Height 0.0 maps to depth 0.5 (middle), height 1.0+ maps toward 0.0 (near/top).
 -- | This ensures thicker paint renders on top of thinner paint.
-particleToCommand :: forall msg. Paint.Particle -> DrawCommand msg
+particleToCommand :: Paint.Particle -> DrawCommand Void
 particleToCommand p =
   let
     pos = Paint.particlePosition p
@@ -221,7 +236,7 @@ particleToCommand p =
     clampedDepth = if depthFromHeight < 0.0 then 0.0 else depthFromHeight
     
     -- Convert to DrawParticle params
-    params :: ParticleParams msg
+    params :: ParticleParams Void
     params =
       { x: Coord.screenX pos.x
       , y: Coord.screenY pos.y
@@ -229,7 +244,7 @@ particleToCommand p =
       , size: Device.px radius
       , color: rgbaColor
       , pickId: Nothing :: Maybe PickId
-      , onClick: Nothing :: Maybe msg
+      , onClick: Nothing :: Maybe Void
       }
   in
     DrawParticle params
@@ -246,3 +261,40 @@ colorToRGBA c = RGB.rgba
 show :: Boolean -> String
 show true = "true"
 show false = "false"
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--                                                             // 3d rendering
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- | Render a 3D layer to the canvas.
+-- |
+-- | Converts Layer3DContent to DrawScene3D command and renders via GPU.
+-- | This integrates 3D content (meshes, lights, camera) with the
+-- | existing 2D paint system.
+renderScene3D 
+  :: forall msg
+   . GPURuntime 
+  -> Layer3D.Layer3DContent msg 
+  -> { x :: Number, y :: Number, width :: Number, height :: Number }
+  -> Effect Unit
+renderScene3D runtime content viewport = do
+  let 
+    -- Build the Scene3D from layer content
+    scene = Layer3D.buildScene3D content
+    
+    -- Create DrawScene3D command with viewport
+    command :: DrawCommand msg
+    command = DrawScene3D
+      { camera: scene.camera
+      , background: scene.background
+      , lights: scene.lights
+      , meshes: scene.meshes
+      , x: Coord.screenX viewport.x
+      , y: Coord.screenY viewport.y
+      , width: Coord.pixelWidth viewport.width
+      , height: Coord.pixelHeight viewport.height
+      , depth: depthValue 0.0  -- 3D scenes render at back
+      , pickId: Nothing
+      }
+  
+  GPU.render runtime.renderer [command]

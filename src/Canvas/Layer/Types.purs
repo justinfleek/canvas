@@ -39,6 +39,7 @@ module Canvas.Layer.Types
   ( -- * Layer
     Layer
   , mkLayer
+  , mkLayer3D
   , layerId
   , layerName
   , layerZIndex
@@ -106,6 +107,16 @@ module Canvas.Layer.Types
   , displayLayer
   , displayLayerStack
   , displayBackground
+  
+  -- * Layer Content Type (2D/3D)
+  , LayerContentType
+      ( Paint2DContent
+      , Scene3DContent
+      )
+  , layerContentType
+  , setLayerContentType
+  , isPaint2DLayer
+  , isScene3DLayer
   ) where
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -161,10 +172,35 @@ import Canvas.Types
   )
 
 -- ═════════════════════════════════════════════════════════════════════════════
+--                                                           // layer content type
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Type of content in a layer.
+-- |
+-- | A layer can contain either:
+-- | - 2D paint content (SPH particle simulation, strokes)
+-- | - 3D scene content (meshes, lights, camera)
+-- |
+-- | This allows mixing 2D painting with 3D elements in the same canvas.
+data LayerContentType
+  = Paint2DContent    -- ^ Traditional 2D paint layer
+  | Scene3DContent    -- ^ 3D scene layer (uses Layer3D)
+
+derive instance eqLayerContentType :: Eq LayerContentType
+derive instance ordLayerContentType :: Ord LayerContentType
+
+instance showLayerContentType :: Show LayerContentType where
+  show Paint2DContent = "2D Paint"
+  show Scene3DContent = "3D Scene"
+
+-- ═════════════════════════════════════════════════════════════════════════════
 --                                                                      // layer
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- | A single layer in the canvas.
+-- |
+-- | Layers can contain either 2D paint or 3D scene content.
+-- | The contentType field determines which rendering path is used.
 type Layer =
   { id :: LayerId
   , name :: String
@@ -175,9 +211,10 @@ type Layer =
   , blendMode :: BlendMode
   , clipMask :: Maybe LayerId  -- ^ Clip to another layer
   , bounds :: Bounds           -- ^ Layer bounds
+  , contentType :: LayerContentType  -- ^ 2D paint or 3D scene
   }
 
--- | Create a new layer.
+-- | Create a new 2D paint layer.
 mkLayer :: LayerId -> String -> ZIndex -> Bounds -> Layer
 mkLayer lid lname zidx lbounds =
   { id: lid
@@ -189,6 +226,22 @@ mkLayer lid lname zidx lbounds =
   , blendMode: BlendNormal
   , clipMask: Nothing
   , bounds: lbounds
+  , contentType: Paint2DContent
+  }
+
+-- | Create a new 3D scene layer.
+mkLayer3D :: LayerId -> String -> ZIndex -> Bounds -> Layer
+mkLayer3D lid lname zidx lbounds =
+  { id: lid
+  , name: lname
+  , zIndex: zidx
+  , visible: true
+  , locked: false
+  , opacity: 100.0
+  , blendMode: BlendNormal
+  , clipMask: Nothing
+  , bounds: lbounds
+  , contentType: Scene3DContent
   }
 
 -- | Get layer ID.
@@ -227,6 +280,10 @@ layerClipMask l = l.clipMask
 layerBounds :: Layer -> Bounds
 layerBounds l = l.bounds
 
+-- | Get layer content type.
+layerContentType :: Layer -> LayerContentType
+layerContentType l = l.contentType
+
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                            // layer mutations
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -263,6 +320,10 @@ setLayerClipMask maskId l = l { clipMask = Just maskId }
 clearLayerClipMask :: Layer -> Layer
 clearLayerClipMask l = l { clipMask = Nothing }
 
+-- | Set layer content type.
+setLayerContentType :: LayerContentType -> Layer -> Layer
+setLayerContentType ct l = l { contentType = ct }
+
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                           // layer predicates
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -292,6 +353,14 @@ isPaintLayer l =
 -- | Check if this is a UI layer (Z >= 100).
 isUILayer :: Layer -> Boolean
 isUILayer l = unwrapZIndex l.zIndex >= 100
+
+-- | Check if layer contains 2D paint content.
+isPaint2DLayer :: Layer -> Boolean
+isPaint2DLayer l = l.contentType == Paint2DContent
+
+-- | Check if layer contains 3D scene content.
+isScene3DLayer :: Layer -> Boolean
+isScene3DLayer l = l.contentType == Scene3DContent
 
 -- ═════════════════════════════════════════════════════════════════════════════
 --                                                               // layer stack

@@ -129,6 +129,13 @@ import Hydrogen.Schema.Brush.WetMedia (WetMediaType(Watercolor, OilPaint, Acryli
 import Canvas.Easter as Easter
 
 -- ═════════════════════════════════════════════════════════════════════════════
+--                                                                  // app state
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- | Specialized AppState for this application's Msg type.
+type CanvasState = AppState Msg
+
+-- ═════════════════════════════════════════════════════════════════════════════
 --                                                                 // app config
 -- ═════════════════════════════════════════════════════════════════════════════
 
@@ -156,7 +163,7 @@ gravityScale = 9.81
 -- | - view: Pure view function
 -- | - subscriptions: Active event subscriptions
 -- | - triggers: Interactive trigger definitions
-canvasApp :: App AppState Msg (Element Msg)
+canvasApp :: App CanvasState Msg (Element Msg)
 canvasApp =
   { init: initCanvas
   , update: updateCanvas
@@ -176,7 +183,7 @@ canvasApp =
 -- | - Watercolor brush preset
 -- | - Gravity enabled
 -- | - Playing enabled (simulation active)
-initCanvas :: Transition AppState Msg
+initCanvas :: Transition CanvasState Msg
 initCanvas =
   let
     initialState = State.initialAppState
@@ -199,7 +206,7 @@ initCanvas =
 -- | - Device orientation (gravity)
 -- | - Animation frames (physics simulation)
 -- | - History operations (undo/redo)
-updateCanvas :: Msg -> AppState -> Transition AppState Msg
+updateCanvas :: Msg -> CanvasState -> Transition CanvasState Msg
 updateCanvas msg state = case msg of
   
   -- Tool selection
@@ -519,7 +526,7 @@ updateCanvas msg state = case msg of
     transition state (Log ("EXPORT:" <> format))
 
 -- | Check if painting is currently active (brush tool selected).
-isPaintingActive :: AppState -> Boolean
+isPaintingActive :: CanvasState -> Boolean
 isPaintingActive state =
   let tool = State.currentTool state
   in tool == BrushTool
@@ -572,7 +579,7 @@ presetFromWetMedia mediaType = case mediaType of
 -- | ## Legacy Events (Fallback)
 -- | - Touch events for older browsers
 -- | - Mouse events for desktop fallback
-subscriptionsCanvas :: AppState -> Array (Sub Msg)
+subscriptionsCanvas :: CanvasState -> Array (Sub Msg)
 subscriptionsCanvas state =
   let
     -- Animation frame for physics simulation

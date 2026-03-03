@@ -3543,31 +3543,17 @@ var CanvasApp = (() => {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
 
-  // output/Effect.Class/index.js
-  var monadEffectEffect = {
-    liftEffect: /* @__PURE__ */ identity(categoryFn),
-    Monad0: function() {
-      return monadEffect;
-    }
+  // output/Hydrogen.Math.Core.Constants/index.js
+  var pi2 = 3.141592653589793;
+  var negativeInfinity = /* @__PURE__ */ (function() {
+    return -1 / 0;
+  })();
+  var $$isNaN = function(x) {
+    return x !== x;
   };
-  var liftEffect = function(dict) {
-    return dict.liftEffect;
-  };
-
-  // output/Effect.Console/foreign.js
-  var log2 = function(s) {
-    return function() {
-      console.log(s);
-    };
-  };
-
-  // output/Effect.Class.Console/index.js
-  var log3 = function(dictMonadEffect) {
-    var $67 = liftEffect(dictMonadEffect);
-    return function($68) {
-      return $67(log2($68));
-    };
-  };
+  var infinity2 = /* @__PURE__ */ (function() {
+    return 1 / 0;
+  })();
 
   // output/Hydrogen.Schema.Bounded/index.js
   var isFiniteNumber = function(n) {
@@ -3616,17 +3602,188 @@ var CanvasApp = (() => {
     };
   };
 
-  // output/Hydrogen.Math.Core.Constants/index.js
-  var pi2 = 3.141592653589793;
-  var negativeInfinity = /* @__PURE__ */ (function() {
-    return -1 / 0;
-  })();
-  var $$isNaN = function(x) {
-    return x !== x;
+  // output/Hydrogen.Schema.Color.Channel/index.js
+  var unwrap2 = function(v) {
+    return v;
   };
-  var infinity2 = /* @__PURE__ */ (function() {
-    return 1 / 0;
-  })();
+  var channel = function(n) {
+    return clampInt(0)(255)(n);
+  };
+
+  // output/Hydrogen.Schema.Color.Opacity/index.js
+  var toUnitInterval = function(v) {
+    return toNumber(v) / 100;
+  };
+  var opacity = function(n) {
+    return clampInt(0)(100)(n);
+  };
+
+  // output/Hydrogen.Schema.Color.RGB/index.js
+  var show4 = /* @__PURE__ */ show(showInt);
+  var show1 = /* @__PURE__ */ show(showNumber);
+  var rgbaToLegacyCss = function(v) {
+    var a$prime = toUnitInterval(v.alpha);
+    return "rgba(" + (show4(unwrap2(v.red)) + (", " + (show4(unwrap2(v.green)) + (", " + (show4(unwrap2(v.blue)) + (", " + (show1(a$prime) + ")")))))));
+  };
+  var rgba = function(r) {
+    return function(g) {
+      return function(b) {
+        return function(a) {
+          return {
+            red: channel(r),
+            green: channel(g),
+            blue: channel(b),
+            alpha: opacity(a)
+          };
+        };
+      };
+    };
+  };
+
+  // output/Hydrogen.Math.Core.Trigonometry/index.js
+  var abs2 = function(n) {
+    var $24 = n < 0;
+    if ($24) {
+      return -n;
+    }
+    ;
+    return n;
+  };
+  var atanGo = function($copy_sum) {
+    return function($copy_term) {
+      return function($copy_x2) {
+        return function($copy_n) {
+          var $tco_var_sum = $copy_sum;
+          var $tco_var_term = $copy_term;
+          var $tco_var_x2 = $copy_x2;
+          var $tco_done = false;
+          var $tco_result;
+          function $tco_loop(sum2, term, x2, n) {
+            if (n > 50) {
+              $tco_done = true;
+              return sum2;
+            }
+            ;
+            if (otherwise) {
+              var newTerm = -term * x2;
+              var k = (2 * n | 0) + 1 | 0;
+              var contrib = newTerm / toNumber(k);
+              var newSum = sum2 + contrib;
+              var $34 = abs2(contrib) < 1e-16 * abs2(newSum);
+              if ($34) {
+                $tco_done = true;
+                return newSum;
+              }
+              ;
+              $tco_var_sum = newSum;
+              $tco_var_term = newTerm;
+              $tco_var_x2 = x2;
+              $copy_n = n + 1 | 0;
+              return;
+            }
+            ;
+            throw new Error("Failed pattern match at Hydrogen.Math.Core.Trigonometry (line 241, column 1 - line 241, column 54): " + [sum2.constructor.name, term.constructor.name, x2.constructor.name, n.constructor.name]);
+          }
+          ;
+          while (!$tco_done) {
+            $tco_result = $tco_loop($tco_var_sum, $tco_var_term, $tco_var_x2, $copy_n);
+          }
+          ;
+          return $tco_result;
+        };
+      };
+    };
+  };
+  var atanSmall = function(x) {
+    return atanGo(x)(x)(x * x)(1);
+  };
+  var atan3 = function(x) {
+    if ($$isNaN(x)) {
+      return x;
+    }
+    ;
+    if (x === infinity2) {
+      return pi2 / 2;
+    }
+    ;
+    if (x === negativeInfinity) {
+      return -pi2 / 2;
+    }
+    ;
+    if (abs2(x) > 1) {
+      var $36 = x > 0;
+      if ($36) {
+        return pi2 / 2 - atanSmall(1 / x);
+      }
+      ;
+      return -pi2 / 2 - atanSmall(1 / x);
+    }
+    ;
+    if (otherwise) {
+      return atanSmall(x);
+    }
+    ;
+    throw new Error("Failed pattern match at Hydrogen.Math.Core.Trigonometry (line 226, column 1 - line 226, column 25): " + [x.constructor.name]);
+  };
+  var atan22 = function(y) {
+    return function(x) {
+      if ($$isNaN(x) || $$isNaN(y)) {
+        return 0 / 0;
+      }
+      ;
+      if (x > 0) {
+        return atan3(y / x);
+      }
+      ;
+      if (x < 0 && y >= 0) {
+        return atan3(y / x) + pi2;
+      }
+      ;
+      if (x < 0 && y < 0) {
+        return atan3(y / x) - pi2;
+      }
+      ;
+      if (x === 0 && y > 0) {
+        return pi2 / 2;
+      }
+      ;
+      if (x === 0 && y < 0) {
+        return -pi2 / 2;
+      }
+      ;
+      if (otherwise) {
+        return 0;
+      }
+      ;
+      throw new Error("Failed pattern match at Hydrogen.Math.Core.Trigonometry (line 254, column 1 - line 254, column 36): " + [y.constructor.name, x.constructor.name]);
+    };
+  };
+
+  // output/Effect.Class/index.js
+  var monadEffectEffect = {
+    liftEffect: /* @__PURE__ */ identity(categoryFn),
+    Monad0: function() {
+      return monadEffect;
+    }
+  };
+  var liftEffect = function(dict) {
+    return dict.liftEffect;
+  };
+
+  // output/Effect.Console/foreign.js
+  var log3 = function(s) {
+    return function() {
+      console.log(s);
+    };
+  };
+
+  // output/Effect.Class.Console/index.js
+  var log4 = function(dictMonadEffect) {
+    var $67 = liftEffect(dictMonadEffect);
+    return function($68) {
+      return $67(log3($68));
+    };
+  };
 
   // output/Hydrogen.Schema.Dimension.Device.Types/index.js
   var Pixel = function(x) {
@@ -3869,6 +4026,16 @@ var CanvasApp = (() => {
     };
     return Draw3D2;
   })();
+  var DrawScene3D = /* @__PURE__ */ (function() {
+    function DrawScene3D2(value0) {
+      this.value0 = value0;
+    }
+    ;
+    DrawScene3D2.create = function(value0) {
+      return new DrawScene3D2(value0);
+    };
+    return DrawScene3D2;
+  })();
   var PushClip = /* @__PURE__ */ (function() {
     function PushClip2(value0) {
       this.value0 = value0;
@@ -3943,44 +4110,6 @@ var CanvasApp = (() => {
     };
     return UpdateAnimationState2;
   })();
-
-  // output/Hydrogen.Schema.Color.Channel/index.js
-  var unwrap2 = function(v) {
-    return v;
-  };
-  var channel = function(n) {
-    return clampInt(0)(255)(n);
-  };
-
-  // output/Hydrogen.Schema.Color.Opacity/index.js
-  var toUnitInterval = function(v) {
-    return toNumber(v) / 100;
-  };
-  var opacity = function(n) {
-    return clampInt(0)(100)(n);
-  };
-
-  // output/Hydrogen.Schema.Color.RGB/index.js
-  var show4 = /* @__PURE__ */ show(showInt);
-  var show1 = /* @__PURE__ */ show(showNumber);
-  var rgbaToLegacyCss = function(v) {
-    var a$prime = toUnitInterval(v.alpha);
-    return "rgba(" + (show4(unwrap2(v.red)) + (", " + (show4(unwrap2(v.green)) + (", " + (show4(unwrap2(v.blue)) + (", " + (show1(a$prime) + ")")))))));
-  };
-  var rgba = function(r) {
-    return function(g) {
-      return function(b) {
-        return function(a) {
-          return {
-            red: channel(r),
-            green: channel(g),
-            blue: channel(b),
-            alpha: opacity(a)
-          };
-        };
-      };
-    };
-  };
 
   // output/Hydrogen.Target.GPU/foreign.js
   var getCanvas2DContextImpl = (canvasId) => () => {
@@ -4975,6 +5104,11 @@ var CanvasApp = (() => {
       return renderVideoImpl(ctx)(params.url)(unwrapScreenX(params.x))(unwrapScreenY(params.y))(unwrapPixelWidth(params.width))(unwrapPixelHeight(params.height));
     };
   };
+  var renderScene3DFallback = function(ctx) {
+    return function(params) {
+      return renderRectImpl(ctx)(unwrapScreenX(params.x))(unwrapScreenY(params.y))(unwrapPixelWidth(params.width))(unwrapPixelHeight(params.height))("rgba(60,80,120,0.5)")(0)(0)(0)(0);
+    };
+  };
   var renderQuad = function(ctx) {
     return function(params) {
       var fill = rgbaToCSS(params.fill);
@@ -5011,7 +5145,7 @@ var CanvasApp = (() => {
             return closePathImpl(ctx);
           }
           ;
-          throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 300, column 32 - line 310, column 35): " + [seg.constructor.name]);
+          throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 303, column 32 - line 313, column 35): " + [seg.constructor.name]);
         })();
         (function() {
           if (params.fill instanceof Just) {
@@ -5022,7 +5156,7 @@ var CanvasApp = (() => {
             return unit;
           }
           ;
-          throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 312, column 3 - line 314, column 25): " + [params.fill.constructor.name]);
+          throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 315, column 3 - line 317, column 25): " + [params.fill.constructor.name]);
         })();
         if (params.stroke instanceof Just) {
           return strokePathImpl(ctx)(rgbaToCSS(params.stroke.value0))(unwrapPixel2(params.strokeWidth))();
@@ -5032,7 +5166,7 @@ var CanvasApp = (() => {
           return unit;
         }
         ;
-        throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 316, column 3 - line 318, column 25): " + [params.stroke.constructor.name]);
+        throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 319, column 3 - line 321, column 25): " + [params.stroke.constructor.name]);
       };
     };
   };
@@ -5084,7 +5218,7 @@ var CanvasApp = (() => {
       return 0;
     }
     ;
-    throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 478, column 20 - line 483, column 27): " + [r.constructor.name]);
+    throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 496, column 20 - line 501, column 27): " + [r.constructor.name]);
   };
   var renderRect = function(ctx) {
     return function(params) {
@@ -5131,13 +5265,13 @@ var CanvasApp = (() => {
               return closePathImpl(ctx);
             }
             ;
-            throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 407, column 27 - line 417, column 37): " + [seg.constructor.name]);
+            throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 425, column 27 - line 435, column 37): " + [seg.constructor.name]);
           })();
           return pushClipPathImpl(ctx)();
         };
       }
       ;
-      throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 397, column 23 - line 418, column 25): " + [region.constructor.name]);
+      throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 415, column 23 - line 436, column 25): " + [region.constructor.name]);
     };
   };
   var popClip = function(ctx) {
@@ -5177,6 +5311,10 @@ var CanvasApp = (() => {
         return renderPlaceholder3D(ctx)(cmd.value0);
       }
       ;
+      if (cmd instanceof DrawScene3D) {
+        return renderScene3DFallback(ctx)(cmd.value0);
+      }
+      ;
       if (cmd instanceof PushClip) {
         return pushClip(ctx)(cmd.value0);
       }
@@ -5209,7 +5347,7 @@ var CanvasApp = (() => {
         return pure2(unit);
       }
       ;
-      throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 152, column 25 - line 169, column 38): " + [cmd.constructor.name]);
+      throw new Error("Failed pattern match at Hydrogen.Target.Canvas2D (line 154, column 25 - line 172, column 38): " + [cmd.constructor.name]);
     };
   };
   var render2 = function(ctx) {
@@ -5464,11 +5602,14 @@ void main() {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     const rects = [];
     const particles = [];
+    const scene3ds = [];
     for (const cmd of commands) {
       if (cmd.tag === "DrawRect") {
         rects.push(cmd.value0);
       } else if (cmd.tag === "DrawParticle") {
         particles.push(cmd.value0);
+      } else if (cmd.tag === "DrawScene3D") {
+        scene3ds.push(cmd.value0);
       }
     }
     if (rects.length > 0) {
@@ -5476,6 +5617,9 @@ void main() {
     }
     if (particles.length > 0) {
       renderParticles(renderer, particles);
+    }
+    if (scene3ds.length > 0) {
+      renderScene3DPlaceholders(renderer, scene3ds);
     }
   };
   function renderRects(renderer, rects) {
@@ -5537,6 +5681,20 @@ void main() {
     gl.drawArraysInstanced(gl.POINTS, 0, 1, particles.length);
     gl.bindVertexArray(null);
   }
+  function renderScene3DPlaceholders(renderer, scenes) {
+    const rects = scenes.map((scene) => ({
+      x: scene.x || 0,
+      y: scene.y || 0,
+      width: scene.width || 200,
+      height: scene.height || 200,
+      fill: { r: 0.24, g: 0.31, b: 0.47, a: 0.7 },
+      // Blue-ish 3D placeholder
+      cornerRadius: { topLeft: 8, topRight: 8, bottomRight: 8, bottomLeft: 8 }
+    }));
+    if (rects.length > 0) {
+      renderRects(renderer, rects);
+    }
+  }
 
   // output/Hydrogen.Target.WebGL/index.js
   var render3 = function(renderer) {
@@ -5549,7 +5707,7 @@ void main() {
   var createRenderer = createRendererImpl;
 
   // output/Hydrogen.Target.GPU/index.js
-  var log5 = /* @__PURE__ */ log3(monadEffectEffect);
+  var log5 = /* @__PURE__ */ log4(monadEffectEffect);
   var RendererWebGPU = /* @__PURE__ */ (function() {
     function RendererWebGPU2(value0) {
       this.value0 = value0;
@@ -5748,7 +5906,7 @@ void main() {
 
   // output/Canvas.Runtime.GPU/index.js
   var map6 = /* @__PURE__ */ map(functorArray);
-  var log6 = /* @__PURE__ */ log3(monadEffectEffect);
+  var log6 = /* @__PURE__ */ log4(monadEffectEffect);
   var show5 = function(v) {
     if (v) {
       return "true";
@@ -5758,7 +5916,7 @@ void main() {
       return "false";
     }
     ;
-    throw new Error("Failed pattern match at Canvas.Runtime.GPU (line 246, column 1 - line 246, column 26): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.Runtime.GPU (line 261, column 1 - line 261, column 26): " + [v.constructor.name]);
   };
   var colorToRGBA = function(c) {
     return rgba(floor2(c.r * 255))(floor2(c.g * 255))(floor2(c.b * 255))(floor2(c.a * 100));
@@ -5811,7 +5969,7 @@ void main() {
       return "Canvas2D";
     }
     ;
-    throw new Error("Failed pattern match at Canvas.Runtime.GPU (line 180, column 27 - line 183, column 29): " + [backend.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.Runtime.GPU (line 193, column 27 - line 196, column 29): " + [backend.constructor.name]);
   };
   var getBackendName = function(runtime) {
     return backendToString(runtime.backend);
@@ -5841,7 +5999,7 @@ void main() {
         });
       }
       ;
-      throw new Error("Failed pattern match at Canvas.Runtime.GPU (line 123, column 3 - line 130, column 51): " + [result.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.Runtime.GPU (line 127, column 3 - line 134, column 51): " + [result.constructor.name]);
     };
   };
 
@@ -6114,20 +6272,20 @@ void main() {
   };
   var initGPURuntime = function(gpuRef) {
     return function __do3() {
-      log2("Canvas: Initializing GPU runtime...")();
-      log2("Canvas: Generating linen texture...")();
+      log3("Canvas: Initializing GPU runtime...")();
+      log3("Canvas: Generating linen texture...")();
       initCanvasTextureImpl("paint-canvas")();
       var result = initialize("paint-canvas")();
       if (result instanceof Left) {
-        log2("Canvas: GPU initialization failed: " + result.value0)();
-        log2("Canvas: Falling back to SVG rendering")();
+        log3("Canvas: GPU initialization failed: " + result.value0)();
+        log3("Canvas: Falling back to SVG rendering")();
         writeRef(gpuRef)(Nothing.value)();
         return setGPUStatusText("GPU: SVG fallback")();
       }
       ;
       if (result instanceof Right) {
         var backendName = getBackendName(result.value0);
-        log2("Canvas: GPU initialized with backend: " + backendName)();
+        log3("Canvas: GPU initialized with backend: " + backendName)();
         writeRef(gpuRef)(new Just(result.value0))();
         return setGPUStatusText("GPU: " + backendName)();
       }
@@ -6146,7 +6304,7 @@ void main() {
       var $14 = cmd.value0 === "EXPORT:png";
       if ($14) {
         return function __do3() {
-          log2("Canvas: Exporting as PNG...")();
+          log3("Canvas: Exporting as PNG...")();
           return exportCanvasPNG();
         };
       }
@@ -6154,12 +6312,12 @@ void main() {
       var $15 = cmd.value0 === "EXPORT:svg";
       if ($15) {
         return function __do3() {
-          log2("Canvas: Exporting as SVG...")();
+          log3("Canvas: Exporting as SVG...")();
           return exportCanvasSVG();
         };
       }
       ;
-      return log2(cmd.value0);
+      return log3(cmd.value0);
     }
     ;
     return pure3(unit);
@@ -6174,15 +6332,15 @@ void main() {
               return function(toTickMsg) {
                 return function(toKeyboardShortcutMsg) {
                   return function __do3() {
-                    log2("Canvas: Mounting to " + selector)();
+                    log3("Canvas: Mounting to " + selector)();
                     var maybeEl = selectElement(selector)();
                     if (maybeEl instanceof Nothing) {
-                      log2("Canvas: ERROR - Could not find element: " + selector)();
+                      log3("Canvas: ERROR - Could not find element: " + selector)();
                       return unit;
                     }
                     ;
                     if (maybeEl instanceof Just) {
-                      log2("Canvas: Found root element, initializing...")();
+                      log3("Canvas: Found root element, initializing...")();
                       var stateRef = newRef(initialTransition.state)();
                       var gpuRef = newRef(Nothing.value)();
                       var cancelRef = newRef(pure3(unit))();
@@ -6212,8 +6370,8 @@ void main() {
                         };
                       })();
                       setGlobalUnmountImpl(cancelAnimation)();
-                      log2("Canvas: Animation loop started")();
-                      log2("Canvas: Mount complete!")();
+                      log3("Canvas: Animation loop started")();
+                      log3("Canvas: Mount complete!")();
                       return unit;
                     }
                     ;
@@ -6714,6 +6872,13 @@ void main() {
   var max13 = /* @__PURE__ */ max(ordInt);
   var comparing2 = /* @__PURE__ */ comparing(ordZIndex);
   var compare3 = /* @__PURE__ */ compare(ordZIndex);
+  var Paint2DContent = /* @__PURE__ */ (function() {
+    function Paint2DContent2() {
+    }
+    ;
+    Paint2DContent2.value = new Paint2DContent2();
+    return Paint2DContent2;
+  })();
   var updateLayer = function(lid) {
     return function(f) {
       return function(stack) {
@@ -6730,7 +6895,7 @@ void main() {
           return stack;
         }
         ;
-        throw new Error("Failed pattern match at Canvas.Layer.Types (line 359, column 3 - line 362, column 21): " + [v.constructor.name]);
+        throw new Error("Failed pattern match at Canvas.Layer.Types (line 428, column 3 - line 431, column 21): " + [v.constructor.name]);
       };
     };
   };
@@ -6751,6 +6916,7 @@ void main() {
         blendMode: l.blendMode,
         clipMask: l.clipMask,
         bounds: l.bounds,
+        contentType: l.contentType,
         zIndex: z
       };
     };
@@ -6766,6 +6932,7 @@ void main() {
         blendMode: l.blendMode,
         clipMask: l.clipMask,
         bounds: l.bounds,
+        contentType: l.contentType,
         visible: v
       };
     };
@@ -6821,7 +6988,8 @@ void main() {
             opacity: 100,
             blendMode: BlendNormal.value,
             clipMask: Nothing.value,
-            bounds: lbounds
+            bounds: lbounds,
+            contentType: Paint2DContent.value
           };
         };
       };
@@ -6887,10 +7055,10 @@ void main() {
           return updateLayer(layerId(layerBelow.value0))(setLayerZIndex(layerZIndex(v.value0)))(newStack);
         }
         ;
-        throw new Error("Failed pattern match at Canvas.Layer.Types (line 415, column 9 - line 421, column 88): " + [layerBelow.constructor.name]);
+        throw new Error("Failed pattern match at Canvas.Layer.Types (line 484, column 9 - line 490, column 88): " + [layerBelow.constructor.name]);
       }
       ;
-      throw new Error("Failed pattern match at Canvas.Layer.Types (line 407, column 3 - line 421, column 88): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.Layer.Types (line 476, column 3 - line 490, column 88): " + [v.constructor.name]);
     };
   };
   var findLayerAbove = function(currentZ) {
@@ -6922,10 +7090,10 @@ void main() {
           return updateLayer(layerId(layerAbove.value0))(setLayerZIndex(layerZIndex(v.value0)))(newStack);
         }
         ;
-        throw new Error("Failed pattern match at Canvas.Layer.Types (line 396, column 9 - line 402, column 88): " + [layerAbove.constructor.name]);
+        throw new Error("Failed pattern match at Canvas.Layer.Types (line 465, column 9 - line 471, column 88): " + [layerAbove.constructor.name]);
       }
       ;
-      throw new Error("Failed pattern match at Canvas.Layer.Types (line 388, column 3 - line 402, column 88): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.Layer.Types (line 457, column 3 - line 471, column 88): " + [v.constructor.name]);
     };
   };
   var addLayer = function(l) {
@@ -6989,6 +7157,7 @@ void main() {
   // output/Canvas.State/index.js
   var max9 = /* @__PURE__ */ max(ordNumber);
   var min9 = /* @__PURE__ */ min(ordNumber);
+  var $$delete3 = /* @__PURE__ */ $$delete(ordInt);
   var zoomViewportAt = function(centerX) {
     return function(centerY) {
       return function(scaleDelta) {
@@ -7003,6 +7172,7 @@ void main() {
             brush: s.brush,
             layers: s.layers,
             paint: s.paint,
+            layer3DContent: s.layer3DContent,
             gravity: s.gravity,
             playing: s.playing,
             frameCount: s.frameCount,
@@ -7038,6 +7208,7 @@ void main() {
         brush: s.brush,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7073,6 +7244,7 @@ void main() {
             brush: s.brush,
             layers: s.layers,
             paint: s.paint,
+            layer3DContent: s.layer3DContent,
             playing: s.playing,
             frameCount: s.frameCount,
             lastFrameTime: s.lastFrameTime,
@@ -7100,6 +7272,7 @@ void main() {
         brush: s.brush,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7133,6 +7306,7 @@ void main() {
         tool: s.tool,
         brush: s.brush,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7150,7 +7324,7 @@ void main() {
       };
     }
     ;
-    throw new Error("Failed pattern match at Canvas.State (line 905, column 3 - line 915, column 12): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.State (line 959, column 3 - line 969, column 12): " + [v.constructor.name]);
   };
   var triggerEasterEggConfetti = function(x) {
     return function(y) {
@@ -7162,6 +7336,7 @@ void main() {
           brush: s.brush,
           layers: s.layers,
           paint: s.paint,
+          layer3DContent: s.layer3DContent,
           gravity: s.gravity,
           playing: s.playing,
           frameCount: s.frameCount,
@@ -7187,6 +7362,7 @@ void main() {
       brush: s.brush,
       layers: s.layers,
       paint: s.paint,
+      layer3DContent: s.layer3DContent,
       gravity: s.gravity,
       frameCount: s.frameCount,
       lastFrameTime: s.lastFrameTime,
@@ -7214,6 +7390,7 @@ void main() {
           tool: s.tool,
           brush: s.brush,
           layers: s.layers,
+          layer3DContent: s.layer3DContent,
           gravity: s.gravity,
           playing: s.playing,
           lastFrameTime: s.lastFrameTime,
@@ -7242,6 +7419,7 @@ void main() {
         brush: s.brush,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7267,6 +7445,7 @@ void main() {
       brush: s.brush,
       layers: s.layers,
       paint: s.paint,
+      layer3DContent: s.layer3DContent,
       gravity: s.gravity,
       playing: s.playing,
       frameCount: s.frameCount,
@@ -7292,6 +7471,7 @@ void main() {
           brush: s.brush,
           layers: s.layers,
           paint: s.paint,
+          layer3DContent: s.layer3DContent,
           gravity: s.gravity,
           playing: s.playing,
           frameCount: s.frameCount,
@@ -7318,6 +7498,7 @@ void main() {
           tool: s.tool,
           brush: s.brush,
           paint: s.paint,
+          layer3DContent: s.layer3DContent,
           gravity: s.gravity,
           playing: s.playing,
           frameCount: s.frameCount,
@@ -7348,7 +7529,7 @@ void main() {
         return setLayerVisibility(lid)(!currentVis)(s);
       }
       ;
-      throw new Error("Failed pattern match at Canvas.State (line 697, column 3 - line 701, column 51): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.State (line 750, column 3 - line 754, column 51): " + [v.constructor.name]);
     };
   };
   var setGravityEnabled2 = function(en) {
@@ -7360,6 +7541,7 @@ void main() {
         brush: s.brush,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         playing: s.playing,
         frameCount: s.frameCount,
         lastFrameTime: s.lastFrameTime,
@@ -7384,6 +7566,7 @@ void main() {
         tool: s.tool,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7415,6 +7598,7 @@ void main() {
         viewportState: s.viewportState,
         tool: s.tool,
         layers: s.layers,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7458,6 +7642,7 @@ void main() {
         tool: s.tool,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7490,6 +7675,7 @@ void main() {
         tool: s.tool,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7522,6 +7708,7 @@ void main() {
         tool: s.tool,
         brush: s.brush,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7547,6 +7734,7 @@ void main() {
         brush: s.brush,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7579,6 +7767,7 @@ void main() {
       brush: s.brush,
       layers: s.layers,
       paint: s.paint,
+      layer3DContent: s.layer3DContent,
       gravity: s.gravity,
       playing: s.playing,
       frameCount: s.frameCount,
@@ -7596,8 +7785,8 @@ void main() {
   };
   var removeLayer2 = function(lid) {
     return function(s) {
-      var $79 = unwrapLayerId(lid) === 0;
-      if ($79) {
+      var $87 = unwrapLayerId(lid) === 0;
+      if ($87) {
         return s;
       }
       ;
@@ -7620,7 +7809,8 @@ void main() {
         lastPointerY: s.lastPointerY,
         pointerDown: s.pointerDown,
         showDebugOverlay: s.showDebugOverlay,
-        layers: removeLayer(lid)(s.layers)
+        layers: removeLayer(lid)(s.layers),
+        layer3DContent: $$delete3(unwrapLayerId(lid))(s.layer3DContent)
       };
     };
   };
@@ -7641,6 +7831,7 @@ void main() {
         tool: s.tool,
         brush: s.brush,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7658,7 +7849,7 @@ void main() {
       };
     }
     ;
-    throw new Error("Failed pattern match at Canvas.State (line 920, column 3 - line 930, column 12): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.State (line 974, column 3 - line 984, column 12): " + [v.constructor.name]);
   };
   var pushHistory = function(label) {
     return function(s) {
@@ -7668,8 +7859,8 @@ void main() {
       };
       var newUndo = snoc(s.undoStack)(entry);
       var trimmedUndo = (function() {
-        var $84 = length(newUndo) > s.maxHistorySize;
-        if ($84) {
+        var $92 = length(newUndo) > s.maxHistorySize;
+        if ($92) {
           var v = unsnoc(newUndo);
           if (v instanceof Just) {
             return v.value0.init;
@@ -7679,7 +7870,7 @@ void main() {
             return newUndo;
           }
           ;
-          throw new Error("Failed pattern match at Canvas.State (line 893, column 14 - line 895, column 29): " + [v.constructor.name]);
+          throw new Error("Failed pattern match at Canvas.State (line 947, column 14 - line 949, column 29): " + [v.constructor.name]);
         }
         ;
         return newUndo;
@@ -7691,6 +7882,7 @@ void main() {
         brush: s.brush,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7721,8 +7913,8 @@ void main() {
         var current = computeTwoFingerData(point1)(point2);
         if (s.gesture.active) {
           var scaleDelta = (function() {
-            var $89 = s.gesture.lastDistance > 1e-3;
-            if ($89) {
+            var $97 = s.gesture.lastDistance > 1e-3;
+            if ($97) {
               return current.distance / s.gesture.lastDistance;
             }
             ;
@@ -7748,6 +7940,7 @@ void main() {
             brush: s.brush,
             layers: s.layers,
             paint: s.paint,
+            layer3DContent: s.layer3DContent,
             gravity: s.gravity,
             playing: s.playing,
             frameCount: s.frameCount,
@@ -7788,6 +7981,7 @@ void main() {
           brush: s.brush,
           layers: s.layers,
           paint: s.paint,
+          layer3DContent: s.layer3DContent,
           gravity: s.gravity,
           playing: s.playing,
           frameCount: s.frameCount,
@@ -7814,6 +8008,7 @@ void main() {
         brush: s.brush,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7839,6 +8034,7 @@ void main() {
         brush: s.brush,
         layers: s.layers,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7864,6 +8060,7 @@ void main() {
           brush: s.brush,
           layers: s.layers,
           paint: s.paint,
+          layer3DContent: s.layer3DContent,
           gravity: s.gravity,
           playing: s.playing,
           frameCount: s.frameCount,
@@ -7900,6 +8097,7 @@ void main() {
         tool: s.tool,
         brush: s.brush,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7925,6 +8123,7 @@ void main() {
         tool: s.tool,
         brush: s.brush,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -7982,6 +8181,7 @@ void main() {
       brush: s.brush,
       layers: s.layers,
       paint: s.paint,
+      layer3DContent: s.layer3DContent,
       gravity: s.gravity,
       playing: s.playing,
       frameCount: s.frameCount,
@@ -8021,6 +8221,7 @@ void main() {
       brush: s.brush,
       layers: s.layers,
       paint: s.paint,
+      layer3DContent: s.layer3DContent,
       gravity: s.gravity,
       playing: s.playing,
       frameCount: s.frameCount,
@@ -8054,6 +8255,7 @@ void main() {
         brush: defaultBrushConfig,
         layers: mkLayerStack([bgLayer, defaultLayer])(defaultLayerId),
         paint: mkPaintSystem(bounds)(Watercolor.value),
+        layer3DContent: empty3,
         gravity: initialGravityState,
         playing: false,
         frameCount: 0,
@@ -8081,6 +8283,7 @@ void main() {
       tool: s.tool,
       brush: s.brush,
       layers: s.layers,
+      layer3DContent: s.layer3DContent,
       gravity: s.gravity,
       playing: s.playing,
       frameCount: s.frameCount,
@@ -8119,6 +8322,7 @@ void main() {
               tool: s.tool,
               brush: s.brush,
               layers: s.layers,
+              layer3DContent: s.layer3DContent,
               gravity: s.gravity,
               playing: s.playing,
               frameCount: s.frameCount,
@@ -8143,6 +8347,7 @@ void main() {
             brush: s.brush,
             layers: s.layers,
             paint: s.paint,
+            layer3DContent: s.layer3DContent,
             gravity: s.gravity,
             playing: s.playing,
             frameCount: s.frameCount,
@@ -8183,6 +8388,7 @@ void main() {
                 lastFrameTime: s.lastFrameTime,
                 lastPointerX: s.lastPointerX,
                 lastPointerY: s.lastPointerY,
+                layer3DContent: s.layer3DContent,
                 layers: s.layers,
                 maxHistorySize: s.maxHistorySize,
                 paint: s.paint,
@@ -8212,6 +8418,7 @@ void main() {
                 lastFrameTime: withSizedBrush.lastFrameTime,
                 lastPointerX: withSizedBrush.lastPointerX,
                 lastPointerY: withSizedBrush.lastPointerY,
+                layer3DContent: withSizedBrush.layer3DContent,
                 layers: withSizedBrush.layers,
                 maxHistorySize: withSizedBrush.maxHistorySize,
                 playing: withSizedBrush.playing,
@@ -8232,6 +8439,7 @@ void main() {
                 lastFrameTime: withParticle.lastFrameTime,
                 lastPointerX: withParticle.lastPointerX,
                 lastPointerY: withParticle.lastPointerY,
+                layer3DContent: withParticle.layer3DContent,
                 layers: withParticle.layers,
                 maxHistorySize: withParticle.maxHistorySize,
                 paint: withParticle.paint,
@@ -8260,6 +8468,7 @@ void main() {
           tool: s.tool,
           brush: s.brush,
           layers: s.layers,
+          layer3DContent: s.layer3DContent,
           gravity: s.gravity,
           playing: s.playing,
           frameCount: s.frameCount,
@@ -8289,6 +8498,7 @@ void main() {
         tool: s.tool,
         brush: s.brush,
         paint: s.paint,
+        layer3DContent: s.layer3DContent,
         gravity: s.gravity,
         playing: s.playing,
         frameCount: s.frameCount,
@@ -8334,125 +8544,6 @@ void main() {
   var charAt2 = /* @__PURE__ */ (function() {
     return _charAt(Just.create)(Nothing.value);
   })();
-
-  // output/Hydrogen.Math.Core.Trigonometry/index.js
-  var abs4 = function(n) {
-    var $24 = n < 0;
-    if ($24) {
-      return -n;
-    }
-    ;
-    return n;
-  };
-  var atanGo = function($copy_sum) {
-    return function($copy_term) {
-      return function($copy_x2) {
-        return function($copy_n) {
-          var $tco_var_sum = $copy_sum;
-          var $tco_var_term = $copy_term;
-          var $tco_var_x2 = $copy_x2;
-          var $tco_done = false;
-          var $tco_result;
-          function $tco_loop(sum2, term, x2, n) {
-            if (n > 50) {
-              $tco_done = true;
-              return sum2;
-            }
-            ;
-            if (otherwise) {
-              var newTerm = -term * x2;
-              var k = (2 * n | 0) + 1 | 0;
-              var contrib = newTerm / toNumber(k);
-              var newSum = sum2 + contrib;
-              var $34 = abs4(contrib) < 1e-16 * abs4(newSum);
-              if ($34) {
-                $tco_done = true;
-                return newSum;
-              }
-              ;
-              $tco_var_sum = newSum;
-              $tco_var_term = newTerm;
-              $tco_var_x2 = x2;
-              $copy_n = n + 1 | 0;
-              return;
-            }
-            ;
-            throw new Error("Failed pattern match at Hydrogen.Math.Core.Trigonometry (line 241, column 1 - line 241, column 54): " + [sum2.constructor.name, term.constructor.name, x2.constructor.name, n.constructor.name]);
-          }
-          ;
-          while (!$tco_done) {
-            $tco_result = $tco_loop($tco_var_sum, $tco_var_term, $tco_var_x2, $copy_n);
-          }
-          ;
-          return $tco_result;
-        };
-      };
-    };
-  };
-  var atanSmall = function(x) {
-    return atanGo(x)(x)(x * x)(1);
-  };
-  var atan3 = function(x) {
-    if ($$isNaN(x)) {
-      return x;
-    }
-    ;
-    if (x === infinity2) {
-      return pi2 / 2;
-    }
-    ;
-    if (x === negativeInfinity) {
-      return -pi2 / 2;
-    }
-    ;
-    if (abs4(x) > 1) {
-      var $36 = x > 0;
-      if ($36) {
-        return pi2 / 2 - atanSmall(1 / x);
-      }
-      ;
-      return -pi2 / 2 - atanSmall(1 / x);
-    }
-    ;
-    if (otherwise) {
-      return atanSmall(x);
-    }
-    ;
-    throw new Error("Failed pattern match at Hydrogen.Math.Core.Trigonometry (line 226, column 1 - line 226, column 25): " + [x.constructor.name]);
-  };
-  var atan22 = function(y) {
-    return function(x) {
-      if ($$isNaN(x) || $$isNaN(y)) {
-        return 0 / 0;
-      }
-      ;
-      if (x > 0) {
-        return atan3(y / x);
-      }
-      ;
-      if (x < 0 && y >= 0) {
-        return atan3(y / x) + pi2;
-      }
-      ;
-      if (x < 0 && y < 0) {
-        return atan3(y / x) - pi2;
-      }
-      ;
-      if (x === 0 && y > 0) {
-        return pi2 / 2;
-      }
-      ;
-      if (x === 0 && y < 0) {
-        return -pi2 / 2;
-      }
-      ;
-      if (otherwise) {
-        return 0;
-      }
-      ;
-      throw new Error("Failed pattern match at Hydrogen.Math.Core.Trigonometry (line 254, column 1 - line 254, column 36): " + [y.constructor.name, x.constructor.name]);
-    };
-  };
 
   // output/Hydrogen.Render.Element.Events/index.js
   var onTouchStart = function($2) {
@@ -9636,7 +9727,7 @@ void main() {
       return "W/W";
     }
     ;
-    throw new Error("Failed pattern match at Canvas.View (line 595, column 1 - line 595, column 37): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.View (line 603, column 1 - line 603, column 37): " + [v.constructor.name]);
   };
   var mediaButton = function(mediaType) {
     return button_(append2([class_("media-btn"), onClick(new MediaTypeSelected(mediaType)), title(wetMediaTypeDescription(mediaType))])(styles([new Tuple("padding", "4px 8px"), new Tuple("border", "none"), new Tuple("border-radius", "3px"), new Tuple("background", "#3a3a5e"), new Tuple("color", "#ccc"), new Tuple("font-size", "11px"), new Tuple("cursor", "pointer")])))([text(mediaLabel(mediaType))]);
@@ -9783,7 +9874,7 @@ void main() {
         return singleton5(v.value0);
       }
       ;
-      throw new Error("Failed pattern match at Canvas.View (line 1387, column 3 - line 1389, column 30): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.View (line 1395, column 3 - line 1397, column 30): " + [v.constructor.name]);
     };
   };
   var intToHex = function(n) {
@@ -10082,7 +10173,7 @@ void main() {
       return Watercolor.value;
     }
     ;
-    throw new Error("Failed pattern match at Canvas.App (line 551, column 32 - line 557, column 36): " + [mediaType.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.App (line 558, column 32 - line 564, column 36): " + [mediaType.constructor.name]);
   };
   var presetFromName = function(name2) {
     if (name2 === "watercolor") {
@@ -10402,7 +10493,7 @@ void main() {
         return transition(state2)(new Log("EXPORT:" + msg.value0));
       }
       ;
-      throw new Error("Failed pattern match at Canvas.App (line 203, column 26 - line 519, column 49): " + [msg.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.App (line 210, column 26 - line 526, column 49): " + [msg.constructor.name]);
     };
   };
   var initCanvas = /* @__PURE__ */ (function() {
@@ -10431,10 +10522,10 @@ void main() {
         });
       }
       ;
-      throw new Error("Failed pattern match at Canvas.App (line 754, column 16 - line 759, column 10): " + [v1.constructor.name]);
+      throw new Error("Failed pattern match at Canvas.App (line 761, column 16 - line 766, column 10): " + [v1.constructor.name]);
     }
     ;
-    throw new Error("Failed pattern match at Canvas.App (line 752, column 3 - line 759, column 10): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.App (line 759, column 3 - line 766, column 10): " + [v.constructor.name]);
   };
   var handleTouchStart = function(event) {
     var v = touchCount(event);
@@ -10451,7 +10542,7 @@ void main() {
       return CanvasReleased.value;
     }
     ;
-    throw new Error("Failed pattern match at Canvas.App (line 724, column 10 - line 726, column 42): " + [v1.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.App (line 731, column 10 - line 733, column 42): " + [v1.constructor.name]);
   };
   var handleTouchMove = function(event) {
     var v = touchCount(event);
@@ -10468,7 +10559,7 @@ void main() {
       return CanvasReleased.value;
     }
     ;
-    throw new Error("Failed pattern match at Canvas.App (line 733, column 10 - line 735, column 42): " + [v1.constructor.name]);
+    throw new Error("Failed pattern match at Canvas.App (line 740, column 10 - line 742, column 42): " + [v1.constructor.name]);
   };
   var handleTouchEnd = function(event) {
     var $75 = touchCount(event) < 2;
@@ -10552,12 +10643,12 @@ void main() {
     triggers: []
   };
   var main = function __do2() {
-    log2("Canvas Builder initializing...")();
-    log2("  - SPH fluid simulation: enabled")();
-    log2("  - Device orientation: listening")();
-    log2("  - Touch input: ready")();
-    log2("  - Physics timestep: 16.67ms (60 FPS)")();
-    log2("")();
+    log3("Canvas Builder initializing...")();
+    log3("  - SPH fluid simulation: enabled")();
+    log3("  - Device orientation: listening")();
+    log3("  - Touch input: ready")();
+    log3("  - Physics timestep: 16.67ms (60 FPS)")();
+    log3("")();
     var getParticlesFromState = function(state2) {
       return allParticles(paintSystem(state2));
     };
@@ -10570,7 +10661,7 @@ void main() {
       });
     };
     mount("#app")(canvasApp)(updateCanvas)(view)(initCanvas)(getParticlesFromState)(Tick.create)(toKbShortcutMsg)();
-    log2("Canvas Builder ready!")();
+    log3("Canvas Builder ready!")();
     return unit;
   };
   return __toCommonJS(index_exports);

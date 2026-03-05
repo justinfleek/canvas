@@ -93,6 +93,8 @@ import Prelude
   )
 
 import Effect (Effect)
+import Effect.Aff (launchAff_)
+import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Data.Either (Either(Left, Right))
 import Data.Maybe (Maybe(Just, Nothing))
@@ -441,20 +443,22 @@ initGPURuntime gpuRef = do
   log "Canvas: Generating linen texture..."
   initCanvasTextureImpl "paint-canvas"
   
-  result <- GPU.initialize "paint-canvas"
-  case result of
-    Left err -> do
-      log $ "Canvas: GPU initialization failed: " <> err
-      log "Canvas: Falling back to SVG rendering"
-      writeRef gpuRef Nothing
-      -- Update GPU status indicator to show fallback
-      setGPUStatusText "GPU: SVG fallback"
-    Right runtime -> do
-      let backendName = GPU.getBackendName runtime
-      log $ "Canvas: GPU initialized with backend: " <> backendName
-      writeRef gpuRef (Just runtime)
-      -- Update GPU status indicator
-      setGPUStatusText ("GPU: " <> backendName)
+  -- GPU.initialize returns Aff, so launch it asynchronously
+  launchAff_ do
+    result <- GPU.initialize "paint-canvas"
+    liftEffect $ case result of
+      Left err -> do
+        log $ "Canvas: GPU initialization failed: " <> err
+        log "Canvas: Falling back to SVG rendering"
+        writeRef gpuRef Nothing
+        -- Update GPU status indicator to show fallback
+        setGPUStatusText "GPU: SVG fallback"
+      Right runtime -> do
+        let backendName = GPU.getBackendName runtime
+        log $ "Canvas: GPU initialized with backend: " <> backendName
+        writeRef gpuRef (Just runtime)
+        -- Update GPU status indicator
+        setGPUStatusText ("GPU: " <> backendName)
 
 -- | Set the GPU backend status text in the UI.
 foreign import setGPUStatusTextImpl :: String -> Effect Unit

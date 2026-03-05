@@ -30,4 +30,4 @@ workspace:
     registry: 73.2.0
   extraPackages:
     hydrogen:
-      path: ../hydrogen
+      path: ../hydrogen/hydrogen

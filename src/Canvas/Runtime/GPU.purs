@@ -72,13 +72,21 @@ import Prelude
   , (<)
   , (<>)
   )
+import Prelude (show) as Prelude
 
 import Data.Array (length) as Array
 import Data.Either (Either(Left, Right))
 import Data.Int (floor) as Int
-import Data.Maybe (Maybe(Nothing))
+import Data.Maybe (Maybe(Just, Nothing))
 import Effect (Effect)
+import Effect.Aff (Aff)
+import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
+import Foreign (unsafeToForeign)
+import Web.DOM.NonElementParentNode (getElementById)
+import Web.HTML as HTML
+import Web.HTML.HTMLDocument as HTMLDocument
+import Web.HTML.Window as Window
 
 import Hydrogen.Target.GPU as GPU
 import Hydrogen.GPU.DrawCommand.Types
@@ -110,28 +118,37 @@ type GPURuntime =
 -- |
 -- | Automatically selects the best available backend.
 -- | Returns Left with error message if initialization fails.
-initialize :: String -> Effect (Either String GPURuntime)
+initialize :: String -> Aff (Either String GPURuntime)
 initialize canvasId = do
-  Console.log $ "Initializing GPU runtime for canvas: " <> canvasId
+  liftEffect $ Console.log $ "Initializing GPU runtime for canvas: " <> canvasId
   
-  -- Detect capabilities first
-  caps <- GPU.detectCapabilities
-  Console.log $ "GPU Capabilities:"
-  Console.log $ "  WebGPU: " <> show caps.webgpu
-  Console.log $ "  WebGL2: " <> show caps.webgl2
-  Console.log $ "  Canvas2D: " <> show caps.canvas2d
-  Console.log $ "  Best backend: " <> backendToString caps.bestBackend
+  -- Get canvas element from DOM
+  mCanvas <- liftEffect $ do
+    win <- HTML.window
+    doc <- Window.document win
+    getElementById canvasId (HTMLDocument.toNonElementParentNode doc)
   
-  -- Create renderer
-  result <- GPU.createRenderer canvasId
-  case result of
-    Left err -> do
-      Console.log $ "GPU initialization failed: " <> err
-      pure $ Left err
-    Right renderer -> do
-      let backend = GPU.getBackend renderer
-      Console.log $ "Using backend: " <> backendToString backend
-      pure $ Right { renderer, canvasId, backend }
+  case mCanvas of
+    Nothing -> pure $ Left $ "Canvas element not found: " <> canvasId
+    Just canvasEl -> do
+      -- Detect capabilities first
+      caps <- liftEffect $ GPU.detectCapabilities
+      liftEffect $ Console.log $ "GPU Capabilities:"
+      liftEffect $ Console.log $ "  WebGPU: " <> Prelude.show caps.webgpu
+      liftEffect $ Console.log $ "  WebGL2: " <> Prelude.show caps.webgl2
+      liftEffect $ Console.log $ "  Canvas2D: " <> Prelude.show caps.canvas2d
+      liftEffect $ Console.log $ "  Best backend: " <> backendToString caps.bestBackend
+      
+      -- Create renderer with canvas element
+      result <- GPU.createRenderer (unsafeToForeign canvasEl) canvasId
+      case result of
+        Left err -> do
+          liftEffect $ Console.log $ "GPU initialization failed: " <> err
+          pure $ Left err
+        Right renderer -> do
+          let backend = GPU.getBackend renderer
+          liftEffect $ Console.log $ "Using backend: " <> backendToString backend
+          pure $ Right { renderer, canvasId, backend }
 
 -- | Dispose GPU runtime and release resources.
 dispose :: GPURuntime -> Effect Unit
